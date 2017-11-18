@@ -47,7 +47,6 @@ def store_data():
 
 # # Optimization Process
 def objective(
-
         coverage,
         quantile,
         strike_0,
@@ -67,7 +66,10 @@ def objective(
         characteristics,
         factors,
         options,)
+    # We are interested in maximizing the first of the evaluation metrics
+    # We achieve this by minimizing the negative of the first metric
     return - (results[0])
+
 def optimize(
         dates,
         stockprices,
@@ -77,13 +79,26 @@ def optimize(
     # create the parameters of our strategy: coverage, quantile & strike regression
     # call scipy library and let it optimize the values for the parameters, for certain return metrics
     # return these optimized parameters
+
+    bounds=[
+        (0.1,1),        # coverage
+        (0.01,1),       # quantile
+        (None,None),    # strike_0
+        (None,None),    # strike_1
+    ]
+
     initial_guesses = [0.9, 0.9, 0, 1]
     (
         optimized_coverage,
         optimized_quantile,
         optimized_strike_0,
         optimized_strike_1,
-    ) = minize(objective, initial_guesses, args=(dates,stockprices,characteristics,factors,options))
+    ) = minimize(
+        objective,
+        initial_guesses,
+        args=(dates,stockprices,characteristics,factors,options),
+        bounds=bounds
+    )
     return (optimized_coverage, optimized_quantile, optimized_strike_0, optimized_strike_1)
 
 
