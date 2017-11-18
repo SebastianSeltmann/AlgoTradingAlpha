@@ -7,6 +7,7 @@ import time
 import pandas_datareader.data as web
 import openpyxl
 import quandl
+from scipy.optimize import minimize
 
 
 
@@ -45,7 +46,28 @@ def store_data():
 
 
 # # Optimization Process
+def objective(
 
+        coverage,
+        quantile,
+        strike_0,
+        strike_1,
+        dates,
+        stockprices,
+        characteristics,
+        factors,
+        options,):
+    results = evaluate_strategy(
+        coverage,
+        quantile,
+        strike_0,
+        strike_1,
+        dates,
+        stockprices,
+        characteristics,
+        factors,
+        options,)
+    return - (results[0])
 def optimize(
         dates,
         stockprices,
@@ -55,8 +77,14 @@ def optimize(
     # create the parameters of our strategy: coverage, quantile & strike regression
     # call scipy library and let it optimize the values for the parameters, for certain return metrics
     # return these optimized parameters
-    return (optimized_coverage, optimized_quantile, optimized_strike_0,
-            optimized_strike_1)
+    initial_guesses = [0.9, 0.9, 0, 1]
+    (
+        optimized_coverage,
+        optimized_quantile,
+        optimized_strike_0,
+        optimized_strike_1,
+    ) = minize(objective, initial_guesses, args=(dates,stockprices,characteristics,factors,options))
+    return (optimized_coverage, optimized_quantile, optimized_strike_0, optimized_strike_1)
 
 
 # # Backtesting Process
