@@ -66,15 +66,15 @@ def optimize(
 # # Strategy Evaluation
 
 def evaluate_strategy(
+        coverage,
+        quantile,
+        strike_0,
+        strike_1,
         dates,
         stockprices,
         characteristics,
         factors,
-        options,
-        coverage,
-        quantile,
-        strike_0,
-        strike_1, ):
+        options, ):
     
     # define initial, blank portfolio
     # loop through all assigned dates
@@ -90,17 +90,17 @@ def evaluate_strategy(
 # # TimeStep
 
 def timestep(
-        dates,
-        stockprices,
-        characteristics,
-        factors,
-        options,
+        time,
+        portfolio,
         coverage,
         quantile,
         strike_0,
         strike_1,
-        time,
-        portfolio, ):
+        dates,
+        stockprices,
+        characteristics,
+        factors,
+        options, ):
     # determine P&L from maturing batch of Puts
     # pick stocks
     # pick strikes
