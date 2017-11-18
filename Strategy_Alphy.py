@@ -15,6 +15,9 @@ import quandl
 def store_data():
     # This function is called manually
     # it needs to be called only once
+    F = open("C:\AlgoTradingData\quandl_keyx.txt", "r")
+    quandl_key = F.read()
+    F.close()
     
     # Retrieve Data from original sources
     # Clean them appropriately
