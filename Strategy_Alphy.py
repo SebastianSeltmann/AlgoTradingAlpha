@@ -1,24 +1,27 @@
 
-import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
+from sklearn.model_selection import TimeSeriesSplit
+import numpy as np
 import datetime as dt
 import matplotlib.pyplot as plt
 import time 
 import pandas_datareader.data as web
 import openpyxl
 import quandl
-from scipy.optimize import minimize
 
+# # Constants
+paths = {}
+paths['quandl_key'] = "C:\\AlgoTradingData\\quandl_key.txt"
+paths['pseudo_store'] = "C:\\AlgoTradingData\\retdata.h5"
 
+number_of_timesplits = 10
 
 # # Data Storing
 
 def store_data():
     # This function is called manually
     # it needs to be called only once
-    F = open("C:\AlgoTradingData\quandl_keyx.txt", "r")
-    quandl_key = F.read()
-    F.close()
     
     # Retrieve Data from original sources
     # Clean them appropriately
@@ -27,23 +30,11 @@ def store_data():
     # -  characteristics,
     # -  factors,
     # -  options,
+
+    F = open(paths['quandl_key'], "r")
+    quandl_key = F.read()
+    F.close()
     pass
-
-
-# # Data Loading & Approach Evaluation
-
-# load the datasets: 
-# -  stockprices,
-# -  characteristics,
-# -  factors,
-# -  options,
-
-# split the timerange into chunks
-# call optimize for each training-range
-# call evaluate_strategy for each testing range with optimized params
-# collect metrics of success
-# report overall success of the strategy
-
 
 # # Optimization Process
 def objective(
@@ -80,7 +71,7 @@ def optimize(
     # call scipy library and let it optimize the values for the parameters, for certain return metrics
     # return these optimized parameters
 
-    bounds=[
+    bounds = [
         (0.1,1),        # coverage
         (0.01,1),       # quantile
         (None,None),    # strike_0
@@ -117,9 +108,10 @@ def evaluate_strategy(
         stockprices,
         characteristics,
         factors,
-        options, ):
+        options,
+        cash = 10**6, ):
     
-    # define initial, blank portfolio
+    # define initial portfolio with cash only
     # loop through all assigned dates
     # call timestep at each period
     # determine overall success after all time
@@ -152,3 +144,58 @@ def timestep(
 
     portfolio_new = portfolio
     return portfolio_new
+
+# # Main: Data Loading & Approach Evaluation
+
+# load the datasets:
+# -  stockprices,
+# -  characteristics,
+# -  factors,
+# -  options,
+
+# Rolling window backtest approach
+# split the timerange into chunks
+# call optimize for each training-range
+# call evaluate_strategy for each testing range with optimized params
+# collect metrics of success
+# report overall success of the strategy
+
+store = pd.HDFStore(paths['pseudo_store'])
+ret = store['/stoxx/ret']
+dates = store['/stoxx/ret'].index
+
+stockprices     = pd.DataFrame(np.random.randn(6,4), index=dates, columns=list('ABCD'))
+characteristics = pd.DataFrame(np.random.randn(6,4), index=dates, columns=list('ABCD'))
+factors         = pd.DataFrame(np.random.randn(6,4), index=dates, columns=list('ABCD'))
+options         = pd.DataFrame(np.random.randn(6,4), index=dates, columns=list('ABCD'))
+
+periods = TimeSeriesSplit(n_splits=number_of_timesplits).split(dates)
+metrics = []
+for train, test in periods:
+    (
+        optimized_coverage,
+        optimized_quantile,
+        optimized_strike_0,
+        optimized_strike_1,
+    ) = optimize(
+        dates,
+        stockprices,
+        characteristics,
+        factors,
+        options )
+
+    (metric_of_success1, metric_of_success2) = evaluate_strategy(
+        optimized_coverage,
+        optimized_quantile,
+        optimized_strike_0,
+        optimized_strike_1,
+        test,
+        stockprices,
+        characteristics,
+        factors,
+        options
+    )
+
+    metrics.append((metric_of_success1, metric_of_success2))
+
+print(metrics)
