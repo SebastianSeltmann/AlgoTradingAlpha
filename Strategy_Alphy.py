@@ -1,4 +1,5 @@
 
+## ---------------------- IMPORT PACKAGES ----------------------------
 import pandas as pd
 from scipy.optimize import minimize
 from sklearn.model_selection import TimeSeriesSplit
@@ -11,7 +12,7 @@ import openpyxl
 import quandl
 import wrds
 
-
+## ----------------------- SETTINGS ----------------------------------
 # # Constants
 paths = {}
 paths['quandl_key'] = "C:\\AlgoTradingData\\quandl_key.txt"
@@ -20,30 +21,19 @@ paths['pseudo_store'] = "C:\\AlgoTradingData\\retdata.h5"
 paths['sp500list'] = "C:\\AlgoTradingData\\Constituents.xlsx"
 paths['options'] = []
 for y in range(1996, 2017):
-    paths['options'][y] = "C\\AlgoTradingData\\rawopt_" + y + "AllIndices.csv"
+    paths['options'].append("C:\\AlgoTradingData\\rawopt_" + str(y) + "AllIndices.csv")
 
 number_of_timesplits = 10
 
 
+## -------------------------------------------------------------------
+#                           DATA SOURCING
+## -------------------------------------------------------------------
 def store_sp500list():
-    ## -------------------------------------------------------------------
-    #                           DATA SOURCING
-    ## -------------------------------------------------------------------
-
-
-    ## ---------------------- IMPORT PACKAGES ----------------------------
-
-
-    ## ----------------------- SETTINGS ----------------------------------
-
-
-    EstablishConnection = 1  # 1 = Establishing connection. Input WRDS username and pass
-    # 0 = No action
 
     ## ---------------------- CONNECTION AND TEST ------------------------
 
-    if EstablishConnection == 1:
-        db = wrds.Connection()
+    db = wrds.Connection()
 
     test = db.raw_sql('SELECT date, dji FROM djones.djdaily')
 
@@ -327,7 +317,10 @@ dates = store['/stoxx/ret'].index
 stockprices     = pd.DataFrame(np.random.randn(6,4), index=dates, columns=list('ABCD'))
 characteristics = pd.DataFrame(np.random.randn(6,4), index=dates, columns=list('ABCD'))
 factors         = pd.DataFrame(np.random.randn(6,4), index=dates, columns=list('ABCD'))
-options         = pd.DataFrame(np.random.randn(6,4), index=dates, columns=list('ABCD'))
+
+options = pd.DataFrame()
+for file in paths['options'][0:1]:
+    options = options.append(pd.read_csv(file))[['id', 'date', 'strike_price', 'best_bid']]
 
 periods = TimeSeriesSplit(n_splits=number_of_timesplits).split(dates)
 metrics = []
