@@ -17,6 +17,7 @@ paths = {}
 paths['quandl_key'] = "C:\\AlgoTradingData\\quandl_key.txt"
 paths['stockprices'] = "C:\\AlgoTradingData\\stockprices.h5"
 paths['pseudo_store'] = "C:\\AlgoTradingData\\retdata.h5"
+paths['sp500list'] = "C:\\AlgoTradingData\\Constituents.xlsx"
 paths['options'] = []
 for y in range(1996, 2017):
     paths['options'][y] = "C\\AlgoTradingData\\rawopt_" + y + "AllIndices.csv"
@@ -81,7 +82,7 @@ def store_sp500list():
 
     ## ----------------------------- EXPORT --------------------------------
 
-    writer = pd.ExcelWriter('C:/Users/Ion Tapordei/Dropbox/FS/Modules/AT & DA in Python/Algo/Constituents.xlsx')
+    writer = pd.ExcelWriter(paths['sp500list'])
     sp500_const.to_excel(writer, 'identifiers')
     writer.save()
 
