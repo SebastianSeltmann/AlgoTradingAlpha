@@ -15,6 +15,9 @@ paths = {}
 paths['quandl_key'] = "C:\\AlgoTradingData\\quandl_key.txt"
 paths['stockprices'] = "C:\\AlgoTradingData\\stockprices.h5"
 paths['pseudo_store'] = "C:\\AlgoTradingData\\retdata.h5"
+paths['options'] = []
+for y in range(1996, 2017):
+    paths['options'][y] = "C\\AlgoTradingData\\rawopt_" + y + "AllIndices.csv"
 
 number_of_timesplits = 10
 
