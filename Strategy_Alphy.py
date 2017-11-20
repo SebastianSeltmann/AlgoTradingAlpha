@@ -63,9 +63,13 @@ def store_sp500list():
     idx = np.isin(id_const['gvkey'], sp500_const['gvkey'])
 
     # source CRSP identifiers
-    cusips = sp500_const['cusip'].values
-    crsp_id = db.raw_sql("selectp permno, permco, cusip from crspa.dsf where cusip in (" + cusips + ")")
-    crsp_id = db.get_table('crspa', 'dsf', columns=['permno', 'cusip'], obs=1000)
+    crsp_id = pd.read_csv(
+        'C:/AlgoTradingData/SP500_Index_Constitutes.csv')
+    temp = db.raw_sql(
+        "Select comnam, permno from crspa.dse where permno in (" + ", ".join(str(x) for x in permnos) + ")")
+    temp = temp.dropna(axis=0, how='any').reset_index(drop=True).drop_duplicates()
+    temp = pd.merge(crsp_id, temp, how='left', left_on=['PERMNO'], right_on=['permno'])
+    temp = temp.drop(['permno'], 1)
 
     ## ------------------ SOURCING ACCOUNTING DATA -------------------------
 
@@ -75,6 +79,10 @@ def store_sp500list():
     writer = pd.ExcelWriter(paths['sp500list'])
     sp500_const.to_excel(writer, 'identifiers')
     writer.save()
+
+    store = pd.HDFStore('C:/AlgoTradingData/PERMNO.h5')
+    store['PERMNO_IDs'] = x
+    store.close()
 
 SP500_symbols = [ 'MMM', 'ABT',]
 
