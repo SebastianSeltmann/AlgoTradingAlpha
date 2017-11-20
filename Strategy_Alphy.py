@@ -9,6 +9,8 @@ import time
 import pandas_datareader.data as web
 import openpyxl
 import quandl
+import wrds
+
 
 # # Constants
 paths = {}
@@ -20,6 +22,68 @@ for y in range(1996, 2017):
     paths['options'][y] = "C\\AlgoTradingData\\rawopt_" + y + "AllIndices.csv"
 
 number_of_timesplits = 10
+
+
+def store_sp500list():
+    ## -------------------------------------------------------------------
+    #                           DATA SOURCING
+    ## -------------------------------------------------------------------
+
+
+    ## ---------------------- IMPORT PACKAGES ----------------------------
+
+
+    ## ----------------------- SETTINGS ----------------------------------
+
+
+    EstablishConnection = 1  # 1 = Establishing connection. Input WRDS username and pass
+    # 0 = No action
+
+    ## ---------------------- CONNECTION AND TEST ------------------------
+
+    if EstablishConnection == 1:
+        db = wrds.Connection()
+
+    test = db.raw_sql('SELECT date, dji FROM djones.djdaily')
+
+    ## ----------------- SOURCING S&P 500 CONSTITUENTS --------------------
+
+    # source historical S&P 500 constituents
+    indices = db.get_table('compm', 'IDX_INDEX')
+    const = db.get_table('compm', 'idxcst_his')
+
+    # index the indices that contain S&P 500 in the name
+    ind_list = [s for s in indices['conm'] if "S&P 500" in s]
+    idx = pd.DataFrame(np.isin(indices['conm'], ind_list))
+    indices2 = indices[idx.values]
+
+    # extract the data according to the index
+    sp500_const = const[const['gvkeyx'] == indices2.loc[2, 'gvkeyx']]
+    sp500_const = sp500_const[['gvkey', 'from', 'thru']]
+    idx1 = [x is None for x in sp500_const['thru']]
+    idx2 = sp500_const['thru'] > dt.date(1990, 1, 1)
+    idx = idx1 + idx2
+    sp500_const = sp500_const[idx].reset_index(drop=True)
+
+    # source identifiers and id data for the constituents
+    gvkey_const = sp500_const['gvkey']
+    id_const = db.get_table('compm', 'NAMES_ADSPRATE')
+    sp500_const = pd.merge(sp500_const, id_const, how='inner', on='gvkey')
+    idx = np.isin(id_const['gvkey'], sp500_const['gvkey'])
+
+    # source CRSP identifiers
+    cusips = sp500_const['cusip'].values
+    crsp_id = db.raw_sql("selectp permno, permco, cusip from crspa.dsf where cusip in (" + cusips + ")")
+    crsp_id = db.get_table('crspa', 'dsf', columns=['permno', 'cusip'], obs=1000)
+
+    ## ------------------ SOURCING ACCOUNTING DATA -------------------------
+
+
+    ## ----------------------------- EXPORT --------------------------------
+
+    writer = pd.ExcelWriter('C:/Users/Ion Tapordei/Dropbox/FS/Modules/AT & DA in Python/Algo/Constituents.xlsx')
+    sp500_const.to_excel(writer, 'identifiers')
+    writer.save()
 
 SP500_symbols = [
     'MMM', 'ABT', 'ABBV', 'ACN', 'ATVI', 'AYI', 'ADBE', 'AMD', 'AAP', 'AES',
