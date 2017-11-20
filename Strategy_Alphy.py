@@ -65,6 +65,7 @@ def store_sp500list():
     # source CRSP identifiers
     crsp_id = pd.read_csv(
         'C:/AlgoTradingData/SP500_Index_Constitutes.csv')
+    permnos = crsp_id['PERMNO'].values
     temp = db.raw_sql(
         "Select comnam, permno from crspa.dse where permno in (" + ", ".join(str(x) for x in permnos) + ")")
     temp = temp.dropna(axis=0, how='any').reset_index(drop=True).drop_duplicates()
