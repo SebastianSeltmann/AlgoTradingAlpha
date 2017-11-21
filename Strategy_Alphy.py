@@ -5,20 +5,23 @@ from scipy.optimize import minimize
 from sklearn.model_selection import TimeSeriesSplit
 import numpy as np
 import datetime as dt
-import matplotlib.pyplot as plt
 import time 
 import pandas_datareader.data as web
 import openpyxl
 import quandl
 import wrds
 
+#import matplotlib.pyplot as plt
+
 ## ----------------------- SETTINGS ----------------------------------
 # # Constants
 paths = {}
-paths['quandl_key'] = "C:\\AlgoTradingData\\quandl_key.txt"
-paths['stockprices'] = "C:\\AlgoTradingData\\stockprices.h5"
-paths['pseudo_store'] = "C:\\AlgoTradingData\\retdata.h5"
-paths['sp500list'] = "C:\\AlgoTradingData\\Constituents.xlsx"
+paths['quandl_key']    = "C:\\AlgoTradingData\\quandl_key.txt"
+paths['stockprices']   = "C:\\AlgoTradingData\\stockprices.h5"
+paths['pseudo_store']  = "C:\\AlgoTradingData\\retdata.h5"
+paths['sp500list_old'] = "C:\\AlgoTradingData\\Constituents.xlsx"
+paths['sp500list']     = "C:\\AlgoTradingData\\SP500_Index_Constitutes.csv"
+paths['permno_list'] = "C:\\AlgoTradingData\\PERMNO.h5"
 paths['options'] = []
 for y in range(1996, 2017):
     paths['options'].append("C:\\AlgoTradingData\\rawopt_" + str(y) + "AllIndices.csv")
@@ -63,8 +66,7 @@ def store_sp500list():
     idx = np.isin(id_const['gvkey'], sp500_const['gvkey'])
 
     # source CRSP identifiers
-    crsp_id = pd.read_csv(
-        'C:/AlgoTradingData/SP500_Index_Constitutes.csv')
+    crsp_id = pd.read_csv(paths['sp500list'])
     permnos = crsp_id['PERMNO'].values
     temp = db.raw_sql(
         "Select comnam, permno from crspa.dse where permno in (" + ", ".join(str(x) for x in permnos) + ")")
@@ -77,12 +79,12 @@ def store_sp500list():
 
     ## ----------------------------- EXPORT --------------------------------
 
-    writer = pd.ExcelWriter(paths['sp500list'])
+    writer = pd.ExcelWriter(paths['sp500list_old'])
     sp500_const.to_excel(writer, 'identifiers')
     writer.save()
 
-    store = pd.HDFStore('C:/AlgoTradingData/PERMNO.h5')
-    store['PERMNO_IDs'] = x
+    store = pd.HDFStore(paths['permno_list'])
+    store['PERMNO_IDs'] = temp
     store.close()
 
 SP500_symbols = [ 'MMM', 'ABT',]
