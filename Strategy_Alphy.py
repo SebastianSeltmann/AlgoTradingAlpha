@@ -12,6 +12,7 @@ import openpyxl
 import quandl
 import wrds
 
+
 ## ----------------------- SETTINGS ----------------------------------
 # # Constants
 paths = {}
@@ -91,7 +92,7 @@ def store_sp500list():
     permnos_m = prices_sp50['permno'].unique()
 
     # Process the price data
-    
+
     for i in permnos_m:
         if i == 10057:
             x = prices_sp50[prices_sp50['permno'] == i][['date', 'prc']].set_index('date', drop=True)
