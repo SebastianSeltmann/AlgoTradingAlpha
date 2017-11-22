@@ -61,29 +61,64 @@ def store_sp500list():
     id_const = db.get_table('compm', 'NAMES_ADSPRATE')
     sp500_const = pd.merge(sp500_const, id_const, how='inner', on='gvkey')
     idx = np.isin(id_const['gvkey'], sp500_const['gvkey'])
+    gvkeys = sp500_const['gvkey'].drop_duplicates()
 
     # source CRSP identifiers
     crsp_id = pd.read_csv(
-        'C:/AlgoTradingData/SP500_Index_Constitutes.csv')
+        'C:/Users/Ion Tapordei/Dropbox/FS/Modules/AT & DA in Python/Algo/Data/Constituents CRSP/SP500_permnos.csv')
+    crsp_id = crsp_id[crsp_id['ending'] > "1990-12-31"]
     permnos = crsp_id['PERMNO'].values
-    temp = db.raw_sql(
-        "Select comnam, permno from crspa.dse where permno in (" + ", ".join(str(x) for x in permnos) + ")")
-    temp = temp.dropna(axis=0, how='any').reset_index(drop=True).drop_duplicates()
-    temp = pd.merge(crsp_id, temp, how='left', left_on=['PERMNO'], right_on=['permno'])
-    temp = temp.drop(['permno'], 1)
+    # temp        = db.raw_sql("Select comnam, permno from crspa.dse where permno in (" + ", ".join(str(x) for x in permnos) + ")")
+    # temp        = temp.dropna(axis = 0, how = 'any').reset_index(drop = True).drop_duplicates(subset = "comnam")
+    # temp        = pd.merge(crsp_id, temp, how = 'left', left_on = ['PERMNO'], right_on = ['permno'])
+    # sp500_crsp  = temp.drop(['permno'], 1)
 
     ## ------------------ SOURCING ACCOUNTING DATA -------------------------
 
+    # Test source of accounting data
+    # gvkeys_list = gvkeys.values
+    # SP500_price = db.raw_sql("Select PRCCD,  from comp.g_secd where GVKEY in (" + ", ".join(str(x) for x in gvkeys_list) + ")")
+
+    # No permission to access through python. Check WRDS online querry
+
+
+    ## ------------------- SOURCING PRICE DATA -----------------------------
+
+    prices = db.raw_sql("Select date, permno, cusip, PRC, shrout from crspa.dsf where permno in (" + ", ".join(
+        str(x) for x in permnos) + ")" + " and date between '1990-01-01' and '2017-11-22'")
+    prices_sp50 = prices
+
+    permnos_m = prices_sp50['permno'].unique()
+
+    # Process the price data
+    
+    for i in permnos_m:
+        if i == 10057:
+            x = prices_sp50[prices_sp50['permno'] == i][['date', 'prc']].set_index('date', drop=True)
+            x.columns = [i]
+            prc_merge = x
+        else:
+            y = prices_sp50[prices_sp50['permno'] == i][['date', 'prc']].set_index('date', drop=True)
+            y.columns = [i]
+            prc_merge = pd.merge(prc_merge, y, how='outer', left_index=True, right_index=True)
 
     ## ----------------------------- EXPORT --------------------------------
 
-    writer = pd.ExcelWriter(paths['sp500list'])
-    sp500_const.to_excel(writer, 'identifiers')
-    writer.save()
+    writer1 = pd.ExcelWriter('C:/AlgoTrading/Data[IDs, constituents, prices].xlsx')
+    const.to_excel(writer1, 'Compustat_const')
+    crsp_id.to_excel(writer1, 'CRSP_const')
+    prc_merge.to_excel(writer1, 'Prices')
+    writer1.save()
 
-    store = pd.HDFStore('C:/AlgoTradingData/PERMNO.h5')
-    store['PERMNO_IDs'] = x
+    prices.to_csv('C:/AlgoTrading/Data[raw prices].csv', sep='\t', encoding='utf-8')
+
+    store = pd.HDFStore('C:/AlgoTrading/Data[IDs, constituents, prices].h5')
+    store['Compustat_const'] = const
+    store['CRSP_const'] = crsp_id
+    store['Prices_raw'] = prices
+    store['Prices'] = prc_merge
     store.close()
+
 
 SP500_symbols = [ 'MMM', 'ABT',]
 
