@@ -21,7 +21,8 @@ paths['stockprices'] = "C:\\AlgoTradingData\\stockprices.h5"
 paths['pseudo_store'] = "C:\\AlgoTradingData\\retdata.h5"
 paths['sp500list'] = "C:\\AlgoTradingData\\Constituents.xlsx"
 paths['sp500_permnos'] = "C:\\AlgoTradingData\\SP500_permnos.csv"
-paths['constituents & prices'] = "C:\\AlgoTradingData\\[IDs, constituents, prices].h5"
+paths['h5 constituents & prices'] = "C:\\AlgoTradingData\\[IDs, constituents, prices].h5"
+paths['xlsx constituents & prices'] = "C:\\AlgoTradingData\\[IDs, constituents, prices].xlsx"
 paths['raw prices'] = "C:\\AlgoTrading\\Data[raw prices].csv"
 paths['options'] = []
 for y in range(1996, 2017):
@@ -34,47 +35,23 @@ number_of_timesplits = 10
 #                           DATA SOURCING
 ## -------------------------------------------------------------------
 def store_sp500list():
+    # - stockprices
 
-    ## ---------------------- CONNECTION AND TEST ------------------------
+
+    ## ---------------------- WRDS CONNECTION  ------------------------
 
     db = wrds.Connection()
 
-    test = db.raw_sql('SELECT date, dji FROM djones.djdaily')
 
     ## ----------------- SOURCING S&P 500 CONSTITUENTS --------------------
 
     # source historical S&P 500 constituents
-    indices = db.get_table('compm', 'IDX_INDEX')
     const = db.get_table('compm', 'idxcst_his')
-
-    # index the indices that contain S&P 500 in the name
-    ind_list = [s for s in indices['conm'] if "S&P 500" in s]
-    idx = pd.DataFrame(np.isin(indices['conm'], ind_list))
-    indices2 = indices[idx.values]
-
-    # extract the data according to the index
-    sp500_const = const[const['gvkeyx'] == indices2.loc[2, 'gvkeyx']]
-    sp500_const = sp500_const[['gvkey', 'from', 'thru']]
-    idx1 = [x is None for x in sp500_const['thru']]
-    idx2 = sp500_const['thru'] > dt.date(1990, 1, 1)
-    idx = idx1 + idx2
-    sp500_const = sp500_const[idx].reset_index(drop=True)
-
-    # source identifiers and id data for the constituents
-    gvkey_const = sp500_const['gvkey']
-    id_const = db.get_table('compm', 'NAMES_ADSPRATE')
-    sp500_const = pd.merge(sp500_const, id_const, how='inner', on='gvkey')
-    idx = np.isin(id_const['gvkey'], sp500_const['gvkey'])
-    gvkeys = sp500_const['gvkey'].drop_duplicates()
 
     # source CRSP identifiers
     crsp_id = pd.read_csv(paths['sp500_permnos'])
     crsp_id = crsp_id[crsp_id['ending'] > "1990-12-31"]
     permnos = crsp_id['PERMNO'].values
-    # temp        = db.raw_sql("Select comnam, permno from crspa.dse where permno in (" + ", ".join(str(x) for x in permnos) + ")")
-    # temp        = temp.dropna(axis = 0, how = 'any').reset_index(drop = True).drop_duplicates(subset = "comnam")
-    # temp        = pd.merge(crsp_id, temp, how = 'left', left_on = ['PERMNO'], right_on = ['permno'])
-    # sp500_crsp  = temp.drop(['permno'], 1)
 
     ## ------------------ SOURCING ACCOUNTING DATA -------------------------
 
@@ -107,7 +84,7 @@ def store_sp500list():
 
     ## ----------------------------- EXPORT --------------------------------
 
-    writer1 = pd.ExcelWriter(paths['constituents & prices'])
+    writer1 = pd.ExcelWriter(paths['xlsx constituents & prices'])
     const.to_excel(writer1, 'Compustat_const')
     crsp_id.to_excel(writer1, 'CRSP_const')
     prc_merge.to_excel(writer1, 'Prices')
@@ -115,7 +92,7 @@ def store_sp500list():
 
     prices.to_csv(paths['raw prices'], sep='\t', encoding='utf-8')
 
-    store = pd.HDFStore(paths['constituents & prices'])
+    store = pd.HDFStore(paths['h5 constituents & prices'])
     store['Compustat_const'] = const
     store['CRSP_const'] = crsp_id
     store['Prices_raw'] = prices
@@ -155,39 +132,7 @@ def load_data():
 
     return prices, prices_raw, comp_const, CRSP_const
 
-
-def store_sp500():
-    problematic_symbols = []
-    stockprices = pd.DataFrame()
-    remaining = SP500_symbols
-
-    number_of_retries = 10
-
-    retry = 1
-    while len(remaining)>0 and retry <= number_of_retries:
-        problematic_symbols = []
-        for i in range(len(remaining)):
-            #'\b'*30 +
-            print(str(retry) + ':' + str(i)+ '/' + str(len(remaining))+ '|'+remaining[i])
-            try:
-                stock = web.DataReader(remaining[i], 'yahoo')
-                if(len(stockprices.columns) == 0):
-                    renamed_cols = {}
-                    for col in stock.columns:
-                        renamed_cols[col] = col + '_' + remaining[i]
-                    stockprices = stock.rename(columns=renamed_cols)
-                else:
-                    stockprices = stockprices.join(stock, how='outer', rsuffix='_'+remaining[i])
-            except:
-                problematic_symbols.append(remaining[i])
-        print(str(retry) + ':' + str(len(remaining)) + '/' + str(len(remaining)) + '| '
-              + str(len(problematic_symbols)) + ' failed')
-        remaining = problematic_symbols
-        retry = retry + 1
-    store = pd.HDFStore(paths['stockprices'])
-    store['sp500'] = stockprices
-    store.close()
-
+prices, prices_raw, comp_const, CRSP_const = load_data()
 
 
 # # Optimization Process
