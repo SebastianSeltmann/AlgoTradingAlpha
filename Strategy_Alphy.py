@@ -5,10 +5,10 @@ from scipy.optimize import minimize
 from sklearn.model_selection import TimeSeriesSplit
 import numpy as np
 import datetime as dt
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import time 
 import pandas_datareader.data as web
-import openpyxl
+#import openpyxl
 import quandl
 import wrds
 
@@ -20,6 +20,9 @@ paths['quandl_key'] = "C:\\AlgoTradingData\\quandl_key.txt"
 paths['stockprices'] = "C:\\AlgoTradingData\\stockprices.h5"
 paths['pseudo_store'] = "C:\\AlgoTradingData\\retdata.h5"
 paths['sp500list'] = "C:\\AlgoTradingData\\Constituents.xlsx"
+paths['sp500_permnos'] = "C:\\AlgoTradingData\\SP500_permnos.csv"
+paths['constituents & prices'] = "C:\\AlgoTradingData\\[IDs, constituents, prices].h5"
+paths['raw prices'] = "C:\\AlgoTrading\\Data[raw prices].csv"
 paths['options'] = []
 for y in range(1996, 2017):
     paths['options'].append("C:\\AlgoTradingData\\rawopt_" + str(y) + "AllIndices.csv")
@@ -65,8 +68,7 @@ def store_sp500list():
     gvkeys = sp500_const['gvkey'].drop_duplicates()
 
     # source CRSP identifiers
-    crsp_id = pd.read_csv(
-        'C:/Users/Ion Tapordei/Dropbox/FS/Modules/AT & DA in Python/Algo/Data/Constituents CRSP/SP500_permnos.csv')
+    crsp_id = pd.read_csv(paths['sp500_permnos'])
     crsp_id = crsp_id[crsp_id['ending'] > "1990-12-31"]
     permnos = crsp_id['PERMNO'].values
     # temp        = db.raw_sql("Select comnam, permno from crspa.dse where permno in (" + ", ".join(str(x) for x in permnos) + ")")
@@ -105,28 +107,19 @@ def store_sp500list():
 
     ## ----------------------------- EXPORT --------------------------------
 
-    writer1 = pd.ExcelWriter('C:/AlgoTrading/Data[IDs, constituents, prices].xlsx')
+    writer1 = pd.ExcelWriter(paths['constituents & prices'])
     const.to_excel(writer1, 'Compustat_const')
     crsp_id.to_excel(writer1, 'CRSP_const')
     prc_merge.to_excel(writer1, 'Prices')
     writer1.save()
 
-    prices.to_csv('C:/AlgoTrading/Data[raw prices].csv', sep='\t', encoding='utf-8')
+    prices.to_csv(paths['raw prices'], sep='\t', encoding='utf-8')
 
-    store = pd.HDFStore('C:/AlgoTrading/Data[IDs, constituents, prices].h5')
+    store = pd.HDFStore(paths['constituents & prices'])
     store['Compustat_const'] = const
     store['CRSP_const'] = crsp_id
     store['Prices_raw'] = prices
     store['Prices'] = prc_merge
-    store.close()
-
-
-# # Data Storing and calling
-    store = pd.HDFStore('C:/AlgoTrading/Data[IDs, constituents, prices].h5')
-    prices = store['Prices']
-    prices_raw = store['Prices_raw']
-    comp_const = store['Compustat_const']
-    CRSP_const = store['CRSP_const']
     store.close()
 
 
@@ -149,6 +142,18 @@ def store_data():
 
     store_sp500()
     pass
+
+def load_data():
+
+    # # Data Storing and calling
+    store = pd.HDFStore(paths['constituents & prices'])
+    prices = store['Prices']
+    prices_raw = store['Prices_raw']
+    comp_const = store['Compustat_const']
+    CRSP_const = store['CRSP_const']
+    store.close()
+
+    return prices, prices_raw, comp_const, CRSP_const
 
 
 def store_sp500():
