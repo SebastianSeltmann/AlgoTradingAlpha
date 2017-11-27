@@ -23,8 +23,15 @@ paths['sp500list'] = "C:\\AlgoTradingData\\Constituents.xlsx"
 paths['sp500_permnos'] = "C:\\AlgoTradingData\\SP500_permnos.csv"
 paths['h5 constituents & prices'] = "C:\\AlgoTradingData\\[IDs, constituents, prices].h5"
 paths['xlsx constituents & prices'] = "C:\\AlgoTradingData\\[IDs, constituents, prices].xlsx"
-paths['raw prices'] = "C:\\AlgoTrading\\Data[raw prices].csv"
+paths['raw prices'] = "C:\\AlgoTradingData\\Data[raw prices].csv"
 paths['options'] = []
+paths['fn_AccountingData_xlsx'] = "C:\\AlgoTradingData\\Accounting_data_raw.xlsx"
+paths['Fundamentals.xlsx']= "C:\\AlgoTradingData\\Fundamentals.xlsx"
+paths['Fundamentals.h5']= "C:\\AlgoTradingData\\Fundamentals.h5"
+paths['permno_gvkeys_linkage.xlsx']= "C:\\AlgoTradingData\\permno_gvkeys_linkage.xlsx"
+paths['Linkage.xlsx'] = "C:\\AlgoTradingData\\Linkage.xlsx"
+paths['Linkage.h5'] = "C:\\AlgoTradingData\\Linkage.h5"
+
 for y in range(1996, 2017):
     paths['options'].append("C:\\AlgoTradingData\\rawopt_" + str(y) + "AllIndices.csv")
 
@@ -97,6 +104,101 @@ def store_sp500list():
     store['CRSP_const'] = crsp_id
     store['Prices_raw'] = prices
     store['Prices'] = prc_merge
+    store.close()
+
+def fundamentals():
+    df_AccountingData = pd.read_excel(paths['fn_AccountingData_xlsx'])
+
+    # %%
+    fundamentalNames = pd.DataFrame(df_AccountingData.columns.values)
+
+    # %% Create new Date called as Final Date
+
+    df_AccountingData["New Date"] = 0
+    df_AccountingData["Final Date"] = 0
+
+    row = 0
+    for i in df_AccountingData["Fiscal Quarter"]:
+        if i == 1:
+            df_AccountingData.iloc[row, 21] = "0331"
+        elif i == 2:
+            df_AccountingData.iloc[row, 21] = "0630"
+        elif i == 3:
+            df_AccountingData.iloc[row, 21] = "0930"
+        elif i == 4:
+            df_AccountingData.iloc[row, 21] = "1231"
+        row = row + 1
+
+    row = 0
+    for d in df_AccountingData["Fiscal Year"]:
+        df_AccountingData.iloc[row, 22] = str(df_AccountingData.iloc[row, 2].round()) + str(
+            df_AccountingData.iloc[row, 21])
+        row = row + 1
+
+    df_AccountingData["Final Date"] = pd.to_datetime(df_AccountingData["Final Date"], format="%Y/%m/%d")
+
+    df_AccountingData["Final Date"] = [dt.datetime.strftime(d, "%Y/%m/%d") for d in df_AccountingData["Final Date"]]
+
+    # %% Processing the Data
+
+    # The below line is to make pivot table of "Long-Term Debt for all GVKeys"
+    # x= pd.pivot_table(df_AccountingData,index=["Data Date"],columns=["Global Company Key"],values=["Long-Term Debt - Total"],fill_value=0)
+    # x.columns=x.columns.droplevel()
+
+    # Creating a dictionary. All characterstics saved as DataFrames in the Dictionary
+
+    fundamentals = {}
+    i = 0
+
+    for col in df_AccountingData.columns[6:]:
+        #   x= pd.pivot_table(df_AccountingData,index=["Data Date"],columns=["Global Company Key"],values=[col],fill_value=0)  # Take output file=fundamentals1.xlsx to compare
+        x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col],
+                           fill_value=0)
+        x.columns = x.columns.droplevel()
+        fundamentals[col] = x
+        print(i)
+        i = i + 1
+
+    # %% Calculation of FCFF
+    # FCFF = [CFO + Interest Expense (1- tax rate) - CAPEX]/(Enterprise Value)
+
+    tax_rate=fundamentals['Income Taxes - Total']/(fundamentals['Income Taxes - Total']+fundamentals['Net Income (Loss)'])
+    EV=fundamentals['Long-Term Debt - Total']+fundamentals['Market Value - Total']
+    fundamentals['FCFF'] =(fundamentals['Operating Activities - Net Cash Flow']+fundamentals['Interest and Related Expense- Total']*(1-tax_rate)-fundamentals['Capital Expenditures'])/EV
+
+    # %% Saving the data
+
+    # writing to excel
+
+    writer = pd.ExcelWriter(paths['Fundamentals.xlsx'])
+    for z in fundamentals.keys():
+        fundamentals[z].to_excel(writer, z[:3])
+    writer.save()
+
+    # writing to hd5 file
+    fNames = list(fundamentals.keys())
+    store = pd.HDFStore(paths['Fundamentals.h5'])
+    row = 0
+    for x in fundamentals:
+        store[fNames[row]] = fundamentals[x]
+        row = row + 1
+    store.close()
+
+    # %% Linking gvKey and Premno
+
+    df_Linkage = pd.read_excel(paths['permno_gvkeys_linkage.xlsx'])
+    df_Linkage1 = df_Linkage[["Global Company Key", "Historical CRSP PERMNO Link to COMPUSTAT Record",
+                              "Historical CRSP PERMCO Link to COMPUSTAT Record"]]
+    df_Linkage2 = df_Linkage1.drop_duplicates(keep='last')
+
+    # %% Saving Linkage file to excel and HD5
+    writer = pd.ExcelWriter(paths['Linkage.xlsx'])
+    df_Linkage2.to_excel(writer, 'Linkage')
+    writer.save()
+
+    # writing to HD5 file
+    store = pd.HDFStore(paths['Linkage.h5'])
+    store['Linkage'] = df_Linkage2
     store.close()
 
 
