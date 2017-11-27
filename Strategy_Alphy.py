@@ -21,9 +21,9 @@ paths['stockprices'] = "C:\\AlgoTradingData\\stockprices.h5"
 paths['pseudo_store'] = "C:\\AlgoTradingData\\retdata.h5"
 paths['sp500list'] = "C:\\AlgoTradingData\\Constituents.xlsx"
 paths['sp500_permnos'] = "C:\\AlgoTradingData\\SP500_permnos.csv"
-paths['h5 constituents & prices'] = "C:\\AlgoTradingData\\[IDs, constituents, prices].h5"
-paths['xlsx constituents & prices'] = "C:\\AlgoTradingData\\[IDs, constituents, prices].xlsx"
-paths['raw prices'] = "C:\\AlgoTrading\\Data[raw prices].csv"
+paths['h5 constituents & prices'] = "C:\\AlgoTradingData\\Data[IDs, constituents, prices].h5"
+paths['xlsx constituents & prices'] = "C:\\AlgoTradingData\\Data[IDs, constituents, prices].xlsx"
+paths['raw prices'] = "C:\\AlgoTradingData\\Data[raw prices].csv"
 paths['options'] = []
 for y in range(1996, 2017):
     paths['options'].append("C:\\AlgoTradingData\\rawopt_" + str(y) + "AllIndices.csv")
@@ -34,7 +34,7 @@ number_of_timesplits = 10
 ## -------------------------------------------------------------------
 #                           DATA SOURCING
 ## -------------------------------------------------------------------
-def store_sp500list():
+def store_sp500():
     # - stockprices
 
 
@@ -115,7 +115,6 @@ def store_data():
     F = open(paths['quandl_key'], "r")
     quandl_key = F.read()
     F.close()
-    print(quandl_key)
 
     store_sp500()
     pass
@@ -123,7 +122,7 @@ def store_data():
 def load_data():
 
     # # Data Storing and calling
-    store = pd.HDFStore(paths['constituents & prices'])
+    store = pd.HDFStore(paths['h5 constituents & prices'])
     prices = store['Prices']
     prices_raw = store['Prices_raw']
     comp_const = store['Compustat_const']
