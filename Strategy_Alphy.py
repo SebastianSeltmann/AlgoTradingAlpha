@@ -121,9 +121,14 @@ def store_sp500list():
     store.close()
 
 
-SP500_symbols = [ 'MMM', 'ABT',]
+# # Data Storing and calling
+    store = pd.HDFStore('C:/AlgoTrading/Data[IDs, constituents, prices].h5')
+    prices = store['Prices']
+    prices_raw = store['Prices_raw']
+    comp_const = store['Compustat_const']
+    CRSP_const = store['CRSP_const']
+    store.close()
 
-# # Data Storing
 
 def store_data():
     # This function is called manually
