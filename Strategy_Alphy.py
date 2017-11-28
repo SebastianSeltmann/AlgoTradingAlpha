@@ -289,14 +289,23 @@ def load_chunked_data(chunksize=251):
 def store_options(CRSP_const):
     #counter = 0
     store = pd.HDFStore(paths['all_options_h5'])
+    st_y  = pd.to_datetime(CRSP_const['start'])
+    en_y  = pd.to_datetime(CRSP_const['ending'])
     for file in paths['options']:
         with open(file, 'r') as o:
             print(file)
-            data = pd.read_csv(o)[0:100]
+            data  = pd.read_csv(o)
+            year_index = file.find('rawopt_')
+            cur_y = file[year_index+7:year_index+7+4]
+            idx1   = st_y <= cur_y
+            idx2   = en_y >= cur_y
+            idx    = idx1 & idx2
+            const = CRSP_const.loc[idx, :].reset_index(drop = True)
             listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'strike_price']],
-                             CRSP_const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
+                             const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
             print(listO.shape)
-            store.append('options', listO)
+            store.append('options', listO, index = False)
+
             '''
             if counter == 0:
                 with open(paths['all_options_csv'], 'w') as f:
@@ -308,6 +317,12 @@ def store_options(CRSP_const):
             '''
     store.close()
 
+
+def call_options_data():
+
+    store = pd.HDFStore(paths['all_options_h5'])
+    x = store['options']
+    store.close()
 
 # # Optimization Process
 def objective(
