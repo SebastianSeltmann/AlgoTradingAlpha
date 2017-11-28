@@ -240,6 +240,28 @@ def load_chunked_data(chunksize=251):
     return zip(reader_stockprices, reader_options, reader_FCFF, reader_membership)
 
 
+def store_options():
+
+    # Run load_data function first
+
+    path_input = 'C:/OptionsData/AlgoTradingData/'
+
+    paths = {}
+    paths['options'] = []
+
+    for y in range(1996, 2000):
+        paths['options'].append(path_input + "\\rawopt_" + str(y) + "AllIndices.csv")
+
+    for file in paths['options']:
+        with open(file, 'r') as o:
+            data = pd.read_csv(o)[0:100]
+            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'strike_price']],
+                             CRSP_const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
+            print(listO)
+            with open("C:\\AlgoTradingData\\all_options", 'a') as f:
+                listO.to_csv(f, header=False)
+
+
 # # Optimization Process
 def objective(
         coverage,
