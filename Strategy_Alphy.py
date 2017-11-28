@@ -30,7 +30,8 @@ paths['Fundamentals.h5']            = "C:\\AlgoTradingData\\Fundamentals.h5"
 paths['permno_gvkeys_linkage.xlsx'] = "C:\\AlgoTradingData\\permno_gvkeys_linkage.xlsx"
 paths['Linkage.xlsx']               = "C:\\AlgoTradingData\\Linkage.xlsx"
 paths['Linkage.h5']                 = "C:\\AlgoTradingData\\Linkage.h5"
-paths['all_options']                = "C:\\AlgoTradingData\\all_options.csv"
+paths['all_options_csv']            = "C:\\AlgoTradingData\\all_options.csv"
+paths['all_options_h5']             = "C:\\AlgoTradingData\\all_options.h5"
 paths['options'] = []
 for y in range(1996, 2017):
     paths['options'].append("C:\\AlgoTradingData\\rawopt_" + str(y) + "AllIndices.csv")
@@ -234,13 +235,15 @@ def load_data():
 
 def load_chunked_data(chunksize=251):
     reader_stockprices      = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
-    reader_options          = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    #reader_options          = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_options          = pd.read_hdf(paths['all_options_h5'], 'options', chunksize=chunksize)
     reader_FCFF             = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
     reader_membership       = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
     return zip(reader_stockprices, reader_options, reader_FCFF, reader_membership)
 
 def store_options(CRSP_const):
-    counter = 0
+    #counter = 0
+    store = pd.HDFStore(paths['all_options_h5'])
     for file in paths['options']:
         with open(file, 'r') as o:
             print(file)
@@ -248,13 +251,17 @@ def store_options(CRSP_const):
             listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'strike_price']],
                              CRSP_const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
             print(listO.shape)
+            store.append('options', listO)
+            '''
             if counter == 0:
-                with open(paths['all_options'], 'w') as f:
+                with open(paths['all_options_csv'], 'w') as f:
                     listO.to_csv(f, header=True, index=False)
             else:
-                with open(paths['all_options'], 'a') as f:
+                with open(paths['all_options_csv'], 'a') as f:
                     listO.to_csv(f, header=False, index=False)
             counter = counter + 1
+            '''
+    store.close()
 
 
 # # Optimization Process
