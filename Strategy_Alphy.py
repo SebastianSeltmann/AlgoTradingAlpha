@@ -6,7 +6,7 @@ from sklearn.model_selection import TimeSeriesSplit
 import numpy as np
 import datetime as dt
 #import matplotlib.pyplot as plt
-import time 
+import time
 import pandas_datareader.data as web
 #import openpyxl
 import quandl
@@ -37,8 +37,9 @@ paths['Linkage.h5']                 = rootpath + "Linkage.h5"
 paths['all_options_csv']            = rootpath + "all_options.csv"
 paths['all_options_h5']             = rootpath + "all_options.h5"
 paths['options'] = []
+
 for y in range(1996, 2017):
-    paths['options'].append(rootpath + "rawopt_" + str(y) + "AllIndices.csv")
+    paths['options'].append(rootpath + "OptionsData\\rawopt_" + str(y) + "AllIndices.csv")
 
 
 ## -------------------------------------------------------------------
