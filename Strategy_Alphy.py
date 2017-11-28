@@ -200,7 +200,6 @@ def store_fundamentals():
     store['Linkage'] = df_Linkage2
     store.close()
 
-
 def store_data():
     # This function is called manually
     # it needs to be called only once
@@ -236,9 +235,9 @@ def load_data():
 def load_chunked_data(chunksize=251):
     reader_stockprices      = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
     reader_options          = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_fundamentals     = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_FCFF             = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
     reader_membership       = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    return zip(reader_stockprices, reader_options, reader_fundamentals, reader_membership)
+    return zip(reader_stockprices, reader_options, reader_FCFF, reader_membership)
 
 
 # # Optimization Process
@@ -249,7 +248,8 @@ def objective(
         strike_1,
         stockprices,
         options,
-        fundamentals,
+        FCFF,
+        VIX,
         membership,):
     results = evaluate_strategy(
         coverage,
@@ -258,7 +258,8 @@ def objective(
         strike_1,
         stockprices,
         options,
-        fundamentals,
+        FCFF,
+        VIX,
         membership,)
     # We are interested in maximizing the first of the evaluation metrics
     # We achieve this by minimizing the negative of the first metric
@@ -267,7 +268,8 @@ def objective(
 def optimize(
             stockprices,
             options,
-            fundamentals,
+            FCFF,
+            VIX,
             membership,):
     # create the parameters of our strategy: coverage, quantile & strike regression
     # call scipy library and let it optimize the values for the parameters, for certain return metrics
@@ -290,7 +292,7 @@ def optimize(
         objective,
         initial_guesses,
 
-        args=(stockprices, options, fundamentals, membership),
+        args=(stockprices, options, FCFF, VIX, membership),
         bounds=bounds
     )
     return (optimized_coverage, optimized_quantile, optimized_strike_0, optimized_strike_1)
@@ -299,14 +301,15 @@ def optimize(
 # # Strategy Evaluation
 
 def evaluate_strategy(
-        coverage,
-        quantile,
-        strike_0,
-        strike_1,
-        stockprices,
-        options,
-        fundamentals,
-        membership,
+        coverage =None,
+        quantile=0.5,
+        strike_0=1,
+        strike_1=0.01,
+        stockprices=None,
+        options=None,
+        FCFF=None,
+        VIX=None,
+        membership=None,
         cash = 10**6, ):
     
     # define initial portfolio with cash only
@@ -315,11 +318,74 @@ def evaluate_strategy(
     # determine overall success after all time
     # return report of success
 
+    pricy = stockprices.iloc[:5,:5]
+    stockprices = pricy
+    FCFF = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), len(pricy.columns))), index=pricy.index, columns=pricy.columns)
+    VIX = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), 1)), index=pricy.index, columns=['VIX'])
 
-    
+    '''
+    day = dt.datetime.strptime('1990-01-03', '%Y-%m-%d')
+    day2 = dt.datetime.strptime('1990-01-04', '%Y-%m-%d')
+
+    tuples = list(zip(*[[day,day,day,day,day,day2,day2,day2,day2,day2], [10,20,30,40,50,10,20,30,40,50]]))
+    index = pd.MultiIndex.from_tuples(tuples, names=['date', 'strike'])
+    options = pd.DataFrame(np.random.randint(0, 100, size=(len(pricy)*2, len(pricy.columns))), index=index,
+                           columns=pricy.columns)
+    options.xs(20, level='strike')
+    options.xs(day, level='date')
+    options.xs(day, level='date')[10057.0]
+    options.xs(day, level='date')[options.xs(day, level='date')[10057.0] > 7]
+    options.xs(day, level='date')[options.xs(day, level='date').index > 30]
+    options.xs(day, level='date').iloc[1,1]
+    options.xs(day, level='date').loc[20]
+    '''
+
+    options = pd.DataFrame(index=pricy.index, columns=pricy.columns)
+    def single_optionset():
+        return pd.DataFrame([
+            [20,7,np.random.randint(0,10),np.random.rand()],
+            [30,7,np.random.randint(0,10),np.random.rand()],
+            [40,7,np.random.randint(0,10),np.random.rand()],
+            [50,7,np.random.randint(0,10),np.random.rand()],
+            [60,7,np.random.randint(0,10),np.random.rand()],
+            ],
+            columns=['strike','daysToExpiry','price','delta']
+        )
+    options = options.applymap(lambda x: single_optionset())
+
+
+    # keeping only the top q quantile
+    FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(quantile,axis=1))]
+    stockprices_filtered = stockprices + FCFF_filtered*0
+    target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["VIX"], axis="index")
+
+    options_filtered = options + FCFF_filtered*0
+
+    portfolio = {}
+    portfolio['metrics']        = pd.DataFrame(index=stockprices.index, columns=['portfolio_value'])
+    portfolio['cash']           = pd.DataFrame(index=stockprices.index, columns=['cash'])
+    portfolio['amounts']        = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio["strikes"]        = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio["daysToExpiry"]   = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio["price"]          = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+
+    for day in options.index:
+        for stock in options.loc[day].index:
+            opday = options.loc[day][stock]
+            if not np.isnan(target_strike.loc[day,stock]):
+                best_fit_index = opday.iloc[np.absolute((opday['strike'] - target_strike.loc[day,stock]).values).argsort()].index[0]
+                portfolio["strikes"].loc[day, stock]        = opday.loc[best_fit_index]['strike']
+                portfolio["daysToExpiry"].loc[day, stock]   = opday.loc[best_fit_index]['daysToExpiry']
+                portfolio["price"]                          = opday.loc[best_fit_index]['price']
+
     metric_of_success1 = 1
     metric_of_success2 = 1
     return (metric_of_success1, metric_of_success2)
+
+'''
+stockprices, prices_raw, comp_const, CRSP_const = load_data()
+evaluate_strategy(stockprices = stockprices)
+'''
 
 
 # # TimeStep
@@ -333,7 +399,8 @@ def timestep(
         strike_1,
         stockprices,
         options,
-        fundamentals,
+        FCFF,
+        VIX,
         membership,):
     # determine P&L from maturing batch of Puts
     # pick stocks
@@ -372,35 +439,37 @@ def load_data():
 # collect metrics of success
 # report overall success of the strategy
 
+def main():
+    metrics = []
+    counter = 0
+    for stockprices, options, FCFF, membership in load_chunked_data():
+        print(stockprices.shape)
 
-metrics = []
-counter = 0
-for stockprices, options, fundamentals, membership in load_chunked_data():
-    print(stockprices.shape)
-    if counter >= 0:
-        (metric_of_success1, metric_of_success2) = evaluate_strategy(
+
+        if counter >= 0:
+            (metric_of_success1, metric_of_success2) = evaluate_strategy(
+                optimized_coverage,
+                optimized_quantile,
+                optimized_strike_0,
+                optimized_strike_1,
+                stockprices,
+                options,
+                FCFF,
+                membership,
+            )
+
+            metrics.append((metric_of_success1, metric_of_success2))
+
+        (
             optimized_coverage,
             optimized_quantile,
             optimized_strike_0,
             optimized_strike_1,
+        ) = optimize(
             stockprices,
             options,
-            fundamentals,
-            membership,
-        )
+            FCFF,
+            membership, )
+        counter = counter + 1
 
-        metrics.append((metric_of_success1, metric_of_success2))
-
-    (
-        optimized_coverage,
-        optimized_quantile,
-        optimized_strike_0,
-        optimized_strike_1,
-    ) = optimize(
-        stockprices,
-        options,
-        fundamentals,
-        membership, )
-    counter = counter + 1
-
-print(metrics)
+    print(metrics)
