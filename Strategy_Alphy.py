@@ -15,26 +15,30 @@ import wrds
 
 ## ----------------------- SETTINGS ----------------------------------
 # # Constants
+F = open("rootpath.txt", "r")
+rootpath = F.read()
+F.close()
 paths = {}
-paths['quandl_key']                 = "C:\\AlgoTradingData\\quandl_key.txt"
-paths['stockprices']                = "C:\\AlgoTradingData\\stockprices.h5"
-paths['pseudo_store']               = "C:\\AlgoTradingData\\retdata.h5"
-paths['sp500list']                  = "C:\\AlgoTradingData\\Constituents.xlsx"
-paths['sp500_permnos']              = "C:\\AlgoTradingData\\SP500_permnos.csv"
-paths['h5 constituents & prices']   = "C:\\AlgoTradingData\\Data[IDs, constituents, prices].h5"
-paths['xlsx constituents & prices'] = "C:\\AlgoTradingData\\Data[IDs, constituents, prices].xlsx"
-paths['raw prices']                 = "C:\\AlgoTradingData\\Data[raw prices].csv"
-paths['fn_AccountingData_xlsx']     = "C:\\AlgoTradingData\\Accounting_data_raw.xlsx"
-paths['Fundamentals.xlsx']          = "C:\\AlgoTradingData\\Fundamentals.xlsx"
-paths['Fundamentals.h5']            = "C:\\AlgoTradingData\\Fundamentals.h5"
-paths['permno_gvkeys_linkage.xlsx'] = "C:\\AlgoTradingData\\permno_gvkeys_linkage.xlsx"
-paths['Linkage.xlsx']               = "C:\\AlgoTradingData\\Linkage.xlsx"
-paths['Linkage.h5']                 = "C:\\AlgoTradingData\\Linkage.h5"
-paths['all_options_csv']            = "C:\\AlgoTradingData\\all_options.csv"
-paths['all_options_h5']             = "C:\\AlgoTradingData\\all_options.h5"
+paths['quandl_key']                 = rootpath + "quandl_key.txt"
+paths['stockprices']                = rootpath + "stockprices.h5"
+paths['vix']                        = rootpath + "vix.h5"
+paths['pseudo_store']               = rootpath + "retdata.h5"
+paths['sp500list']                  = rootpath + "Constituents.xlsx"
+paths['sp500_permnos']              = rootpath + "SP500_permnos.csv"
+paths['h5 constituents & prices']   = rootpath + "Data[IDs, constituents, prices].h5"
+paths['xlsx constituents & prices'] = rootpath + "Data[IDs, constituents, prices].xlsx"
+paths['raw prices']                 = rootpath + "Data[raw prices].csv"
+paths['fn_AccountingData_xlsx']     = rootpath + "Accounting_data_raw.xlsx"
+paths['Fundamentals.xlsx']          = rootpath + "Fundamentals.xlsx"
+paths['Fundamentals.h5']            = rootpath + "Fundamentals.h5"
+paths['permno_gvkeys_linkage.xlsx'] = rootpath + "permno_gvkeys_linkage.xlsx"
+paths['Linkage.xlsx']               = rootpath + "Linkage.xlsx"
+paths['Linkage.h5']                 = rootpath + "Linkage.h5"
+paths['all_options_csv']            = rootpath + "all_options.csv"
+paths['all_options_h5']             = rootpath + "all_options.h5"
 paths['options'] = []
 for y in range(1996, 2017):
-    paths['options'].append("C:\\AlgoTradingData\\rawopt_" + str(y) + "AllIndices.csv")
+    paths['options'].append(rootpath + "rawopt_" + str(y) + "AllIndices.csv")
 
 
 ## -------------------------------------------------------------------
