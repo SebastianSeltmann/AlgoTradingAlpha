@@ -16,26 +16,24 @@ import wrds
 ## ----------------------- SETTINGS ----------------------------------
 # # Constants
 paths = {}
-paths['quandl_key'] = "C:\\AlgoTradingData\\quandl_key.txt"
-paths['stockprices'] = "C:\\AlgoTradingData\\stockprices.h5"
-paths['pseudo_store'] = "C:\\AlgoTradingData\\retdata.h5"
-paths['sp500list'] = "C:\\AlgoTradingData\\Constituents.xlsx"
-paths['sp500_permnos'] = "C:\\AlgoTradingData\\SP500_permnos.csv"
-paths['h5 constituents & prices'] = "C:\\AlgoTradingData\\Data[IDs, constituents, prices].h5"
+paths['quandl_key']                 = "C:\\AlgoTradingData\\quandl_key.txt"
+paths['stockprices']                = "C:\\AlgoTradingData\\stockprices.h5"
+paths['pseudo_store']               = "C:\\AlgoTradingData\\retdata.h5"
+paths['sp500list']                  = "C:\\AlgoTradingData\\Constituents.xlsx"
+paths['sp500_permnos']              = "C:\\AlgoTradingData\\SP500_permnos.csv"
+paths['h5 constituents & prices']   = "C:\\AlgoTradingData\\Data[IDs, constituents, prices].h5"
 paths['xlsx constituents & prices'] = "C:\\AlgoTradingData\\Data[IDs, constituents, prices].xlsx"
-paths['raw prices'] = "C:\\AlgoTradingData\\Data[raw prices].csv"
+paths['raw prices']                 = "C:\\AlgoTradingData\\Data[raw prices].csv"
+paths['fn_AccountingData_xlsx']     = "C:\\AlgoTradingData\\Accounting_data_raw.xlsx"
+paths['Fundamentals.xlsx']          = "C:\\AlgoTradingData\\Fundamentals.xlsx"
+paths['Fundamentals.h5']            = "C:\\AlgoTradingData\\Fundamentals.h5"
+paths['permno_gvkeys_linkage.xlsx'] = "C:\\AlgoTradingData\\permno_gvkeys_linkage.xlsx"
+paths['Linkage.xlsx']               = "C:\\AlgoTradingData\\Linkage.xlsx"
+paths['Linkage.h5']                 = "C:\\AlgoTradingData\\Linkage.h5"
+paths['all_options']                = "C:\\AlgoTradingData\\all_options.csv"
 paths['options'] = []
-paths['fn_AccountingData_xlsx'] = "C:\\AlgoTradingData\\Accounting_data_raw.xlsx"
-paths['Fundamentals.xlsx']= "C:\\AlgoTradingData\\Fundamentals.xlsx"
-paths['Fundamentals.h5']= "C:\\AlgoTradingData\\Fundamentals.h5"
-paths['permno_gvkeys_linkage.xlsx']= "C:\\AlgoTradingData\\permno_gvkeys_linkage.xlsx"
-paths['Linkage.xlsx'] = "C:\\AlgoTradingData\\Linkage.xlsx"
-paths['Linkage.h5'] = "C:\\AlgoTradingData\\Linkage.h5"
-
 for y in range(1996, 2017):
     paths['options'].append("C:\\AlgoTradingData\\rawopt_" + str(y) + "AllIndices.csv")
-
-number_of_timesplits = 10
 
 
 ## -------------------------------------------------------------------
@@ -104,6 +102,7 @@ def store_sp500():
     store['Prices_raw'] = prices
     store['Prices'] = prc_merge
     store.close()
+    return crsp_id
 
 def store_fundamentals():
     df_AccountingData = pd.read_excel(paths['fn_AccountingData_xlsx'])
@@ -216,8 +215,9 @@ def store_data():
     quandl_key = F.read()
     F.close()
     '''
-    store_sp500()
-    store_fundamentals
+    CRSP_const = store_sp500()
+    store_fundamentals()
+    store_options(CRSP_const)
     pass
 
 def load_data():
@@ -239,27 +239,22 @@ def load_chunked_data(chunksize=251):
     reader_membership       = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
     return zip(reader_stockprices, reader_options, reader_FCFF, reader_membership)
 
-
-def store_options():
-
-    # Run load_data function first
-
-    path_input = 'C:/OptionsData/AlgoTradingData/'
-
-    paths = {}
-    paths['options'] = []
-
-    for y in range(1996, 2000):
-        paths['options'].append(path_input + "\\rawopt_" + str(y) + "AllIndices.csv")
-
+def store_options(CRSP_const):
+    counter = 0
     for file in paths['options']:
         with open(file, 'r') as o:
+            print(file)
             data = pd.read_csv(o)[0:100]
             listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'strike_price']],
                              CRSP_const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
-            print(listO)
-            with open("C:\\AlgoTradingData\\all_options", 'a') as f:
-                listO.to_csv(f, header=False)
+            print(listO.shape)
+            if counter == 0:
+                with open(paths['all_options'], 'w') as f:
+                    listO.to_csv(f, header=True, index=False)
+            else:
+                with open(paths['all_options'], 'a') as f:
+                    listO.to_csv(f, header=False, index=False)
+            counter = counter + 1
 
 
 # # Optimization Process
