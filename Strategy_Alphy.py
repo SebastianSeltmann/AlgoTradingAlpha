@@ -42,7 +42,6 @@ number_of_timesplits = 10
 #                           DATA SOURCING
 ## -------------------------------------------------------------------
 def store_sp500():
-    # - stockprices
 
 
     ## ---------------------- WRDS CONNECTION  ------------------------
@@ -106,7 +105,7 @@ def store_sp500():
     store['Prices'] = prc_merge
     store.close()
 
-def fundamentals():
+def store_fundamentals():
     df_AccountingData = pd.read_excel(paths['fn_AccountingData_xlsx'])
 
     # %%
@@ -213,12 +212,13 @@ def store_data():
     # -  characteristics,
     # -  factors,
     # -  options,
-
+    '''
     F = open(paths['quandl_key'], "r")
     quandl_key = F.read()
     F.close()
-
+    '''
     store_sp500()
+    store_fundamentals
     pass
 
 def load_data():
@@ -233,7 +233,12 @@ def load_data():
 
     return prices, prices_raw, comp_const, CRSP_const
 
-prices, prices_raw, comp_const, CRSP_const = load_data()
+def load_chunked_data(chunksize=251):
+    reader_stockprices      = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
+    reader_options          = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_fundamentals     = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_membership       = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    return zip(reader_stockprices, reader_options, reader_fundamentals, reader_membership)
 
 
 def store_options():
@@ -264,31 +269,28 @@ def objective(
         quantile,
         strike_0,
         strike_1,
-        dates,
         stockprices,
-        characteristics,
-        factors,
-        options,):
+        options,
+        fundamentals,
+        membership,):
     results = evaluate_strategy(
         coverage,
         quantile,
         strike_0,
         strike_1,
-        dates,
         stockprices,
-        characteristics,
-        factors,
-        options,)
+        options,
+        fundamentals,
+        membership,)
     # We are interested in maximizing the first of the evaluation metrics
     # We achieve this by minimizing the negative of the first metric
     return - (results[0])
 
 def optimize(
-        dates,
-        stockprices,
-        characteristics,
-        factors,
-        options, ):
+            stockprices,
+            options,
+            fundamentals,
+            membership,):
     # create the parameters of our strategy: coverage, quantile & strike regression
     # call scipy library and let it optimize the values for the parameters, for certain return metrics
     # return these optimized parameters
@@ -309,7 +311,8 @@ def optimize(
     ) = minimize(
         objective,
         initial_guesses,
-        args=(dates,stockprices,characteristics,factors,options),
+
+        args=(stockprices, options, fundamentals, membership),
         bounds=bounds
     )
     return (optimized_coverage, optimized_quantile, optimized_strike_0, optimized_strike_1)
@@ -322,11 +325,10 @@ def evaluate_strategy(
         quantile,
         strike_0,
         strike_1,
-        dates,
         stockprices,
-        characteristics,
-        factors,
         options,
+        fundamentals,
+        membership,
         cash = 10**6, ):
     
     # define initial portfolio with cash only
@@ -334,6 +336,8 @@ def evaluate_strategy(
     # call timestep at each period
     # determine overall success after all time
     # return report of success
+
+
     
     metric_of_success1 = 1
     metric_of_success2 = 1
@@ -349,11 +353,10 @@ def timestep(
         quantile,
         strike_0,
         strike_1,
-        dates,
         stockprices,
-        characteristics,
-        factors,
-        options, ):
+        options,
+        fundamentals,
+        membership,):
     # determine P&L from maturing batch of Puts
     # pick stocks
     # pick strikes
@@ -362,7 +365,7 @@ def timestep(
 
     portfolio_new = portfolio
     return portfolio_new
-
+'''
 def load_data():
     stockprices = pd.DataFrame(np.random.randn(6, 4), index=dates, columns=list('ABCD'))
     characteristics = pd.DataFrame(np.random.randn(6, 4), index=dates, columns=list('ABCD'))
@@ -375,7 +378,7 @@ def load_data():
         options = data
 
     return stockprices, characteristics,factors, options
-
+'''
 # # Main: Data Loading & Approach Evaluation
 
 # load the datasets:
@@ -391,39 +394,35 @@ def load_data():
 # collect metrics of success
 # report overall success of the strategy
 
-store = pd.HDFStore(paths['pseudo_store'])
-ret = store['/stoxx/ret']
-dates = store['/stoxx/ret'].index
 
-stockprices, characteristics, factors, options = load_data()
-
-periods = TimeSeriesSplit(n_splits=number_of_timesplits).split(dates)
 metrics = []
-for train, test in periods:
+counter = 0
+for stockprices, options, fundamentals, membership in load_chunked_data():
+    print(stockprices.shape)
+    if counter >= 0:
+        (metric_of_success1, metric_of_success2) = evaluate_strategy(
+            optimized_coverage,
+            optimized_quantile,
+            optimized_strike_0,
+            optimized_strike_1,
+            stockprices,
+            options,
+            fundamentals,
+            membership,
+        )
+
+        metrics.append((metric_of_success1, metric_of_success2))
+
     (
         optimized_coverage,
         optimized_quantile,
         optimized_strike_0,
         optimized_strike_1,
     ) = optimize(
-        dates,
         stockprices,
-        characteristics,
-        factors,
-        options )
-
-    (metric_of_success1, metric_of_success2) = evaluate_strategy(
-        optimized_coverage,
-        optimized_quantile,
-        optimized_strike_0,
-        optimized_strike_1,
-        test,
-        stockprices,
-        characteristics,
-        factors,
-        options
-    )
-
-    metrics.append((metric_of_success1, metric_of_success2))
+        options,
+        fundamentals,
+        membership, )
+    counter = counter + 1
 
 print(metrics)
