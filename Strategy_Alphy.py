@@ -108,7 +108,7 @@ def store_sp500():
     store['Prices_raw'] = prices
     store['Prices'] = prc_merge
     store.close()
-    return crsp_id
+    return prc_merge, crsp_id
 
 def store_fundamentals():
     df_AccountingData = pd.read_excel(paths['fn_AccountingData_xlsx'])
@@ -205,10 +205,47 @@ def store_fundamentals():
     store['Linkage'] = df_Linkage2
     store.close()
 
+def store_vix(prices):
+    '''
+    # Earliest VIX available from quandl is 2005
+    F = open(paths['quandl_key'], "r")
+    quandl_key = F.read()
+    F.close()
+    quandl.ApiConfig.api_key = quandl_key
+    VIX = quandl.get('CHRIS/CBOE_VX1', start_date="1990-12-31", end_date="2017-12-31")
+    print(VIX.index.min())
+    VIX = quandl.get('CHRIS/CBOE_VX1', start_date="2003-12-31", end_date="2006-12-31")
+    print(VIX.index.min())
+    '''
+
+    years = range(1990,2018)
+    attempts = 30
+    for i in range(len(years)-1):
+        print(str(years[i]))
+        while(attempts > 0):
+            try:
+                if i == 0:
+                    vix = web.DataReader('^VIX', 'yahoo', str(years[i]) + '-01-01', str(years[i+1]) + '-01-01')
+                else:
+                    vix = vix.append(web.DataReader('^VIX', 'yahoo', str(years[i]) + '-01-01', str(years[i+1]) + '-01-01'))
+                break
+            except:
+                print('trying again ' + str(attempts-1) + '...')
+                attempts = attempts - 1
+    vix.loc[:,'pdDates'] = list(x.date() for x in list(pd.to_datetime(vix.index)))
+    fitted_vix = prices.merge(vix, how='left', right_on='pdDates', left_index=True)
+    fitted_vix.drop('pdDates',axis=1, inplace= True)
+    fitted_vix.drop(prices.columns, axis=1, inplace=True)
+
+    store = pd.HDFStore(paths['vix'])
+    store['vix'] = fitted_vix
+    store.close()
+
+
 def store_data():
     # This function is called manually
     # it needs to be called only once
-    
+
     # Retrieve Data from original sources
     # Clean them appropriately
     # Store them in a format ready to be loaded by main process:
@@ -221,10 +258,10 @@ def store_data():
     quandl_key = F.read()
     F.close()
     '''
-    CRSP_const = store_sp500()
+    prices, CRSP_const = store_sp500()
     store_fundamentals()
     store_options(CRSP_const)
-    pass
+    store_vix(prices)
 
 def load_data():
 
@@ -235,8 +272,11 @@ def load_data():
     comp_const = store['Compustat_const']
     CRSP_const = store['CRSP_const']
     store.close()
+    store = pd.HDFStore(paths['vix'])
+    vix = store['vix']
+    store.close()
 
-    return prices, prices_raw, comp_const, CRSP_const
+    return prices, prices_raw, comp_const, CRSP_const, vix
 
 def load_chunked_data(chunksize=251):
     reader_stockprices      = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
@@ -244,6 +284,7 @@ def load_chunked_data(chunksize=251):
     reader_options          = pd.read_hdf(paths['all_options_h5'], 'options', chunksize=chunksize)
     reader_FCFF             = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
     reader_membership       = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_vix              = pd.read_hdf(paths['vix'], sep=',', chunksize=chunksize)
     return zip(reader_stockprices, reader_options, reader_FCFF, reader_membership)
 
 def store_options(CRSP_const):
@@ -355,7 +396,7 @@ def evaluate_strategy(
         VIX=None,
         membership=None,
         cash = 10**6, ):
-    
+
     # define initial portfolio with cash only
     # loop through all assigned dates
     # call timestep at each period
