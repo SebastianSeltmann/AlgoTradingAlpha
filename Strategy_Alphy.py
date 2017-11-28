@@ -27,6 +27,8 @@ paths['raw prices']                 = "C:\\AlgoTradingData\\Data[raw prices].csv
 paths['fn_AccountingData_xlsx']     = "C:\\AlgoTradingData\\Accounting_data_raw.xlsx"
 paths['Fundamentals.xlsx']          = "C:\\AlgoTradingData\\Fundamentals.xlsx"
 paths['Fundamentals.h5']            = "C:\\AlgoTradingData\\Fundamentals.h5"
+paths['FCFF.xlsx']                  = "C:\\AlgoTradingData\\FCFF.xlsx"
+paths['FCFF.h5']                    = "C:\\AlgoTradingData\\FCFF.h5"
 paths['permno_gvkeys_linkage.xlsx'] = "C:\\AlgoTradingData\\permno_gvkeys_linkage.xlsx"
 paths['Linkage.xlsx']               = "C:\\AlgoTradingData\\Linkage.xlsx"
 paths['Linkage.h5']                 = "C:\\AlgoTradingData\\Linkage.h5"
@@ -158,36 +160,98 @@ def store_fundamentals():
         print(i)
         i = i + 1
 
+    date_index = pd.date_range(start='1989.09.30', end='2018.03.31', freq='D')
+    date_index = [dt.datetime.strftime(d, "%Y/%m/%d") for d in date_index]
+
+    s1 = pd.DataFrame(fundamentals["Capital Expenditures"])
+    s1 = pd.DataFrame(s1.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s1 = s1.loc['1990/01/02':'2018/03/31']
+
+    s2 = pd.DataFrame(fundamentals["Long-Term Debt - Total"])
+    s2 = pd.DataFrame(s2.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s2 = s2.loc['1990/01/02':'2018/03/31']
+
+    s3 = pd.DataFrame(fundamentals["Gain/Loss Pretax"])
+    s3 = pd.DataFrame(s3.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s3 = s3.loc['1990/01/02':'2018/03/31']
+
+    s4 = pd.DataFrame(fundamentals["Net Interest Margin"])
+    s4 = pd.DataFrame(s4.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s4 = s4.loc['1990/01/02':'2018/03/31']
+
+    s5 = pd.DataFrame(fundamentals["Net Income (Loss)"])
+    s5 = pd.DataFrame(s5.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s5 = s5.loc['1990/01/02':'2018/03/31']
+
+    s6 = pd.DataFrame(fundamentals["Pretax Income"])
+    s6 = pd.DataFrame(s6.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s6 = s6.loc['1990/01/02':'2018/03/31']
+
+    s7 = pd.DataFrame(fundamentals["Income Taxes - Total"])
+    s7 = pd.DataFrame(s7.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s7 = s7.loc['1990/01/02':'2018/03/31']
+
+    s8 = pd.DataFrame(fundamentals["Interest and Related Expense- Total"])
+    s8 = pd.DataFrame(s8.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s8 = s8.loc['1990/01/02':'2018/03/31']
+
+    s9 = pd.DataFrame(fundamentals["Financing Activities - Net Cash Flow"])
+    s9 = pd.DataFrame(s9.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s9 = s9.loc['1990/01/02':'2018/03/31']
+
+    s10 = pd.DataFrame(fundamentals["Investing Activities - Net Cash Flow"])
+    s10 = pd.DataFrame(s10.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s10 = s10.loc['1990/01/02':'2018/03/31']
+
+    s11 = pd.DataFrame(fundamentals["Operating Activities - Net Cash Flow"])
+    s11 = pd.DataFrame(s11.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s11 = s11.loc['1990/01/02':'2018/03/31']
+
+    s12 = pd.DataFrame(fundamentals["Market Value - Total"])
+    s12 = pd.DataFrame(s12.reindex(date_index, method='ffill'))
+    # Define the date range here
+    s12 = s12.loc['1990/01/02':'2018/03/31']
+
     # %% Calculation of FCFF
     # FCFF = [CFO + Interest Expense (1- tax rate) - CAPEX]/(Enterprise Value)
+    # EV = Market Value + Debt - Cash
 
-    tax_rate=fundamentals['Income Taxes - Total']/(fundamentals['Income Taxes - Total']+fundamentals['Net Income (Loss)'])
-    EV=fundamentals['Long-Term Debt - Total']+fundamentals['Market Value - Total']
-    fundamentals['FCFF'] =(fundamentals['Operating Activities - Net Cash Flow']+fundamentals['Interest and Related Expense- Total']*(1-tax_rate)-fundamentals['Capital Expenditures'])/EV
+    sum1 = s5 + s7
+    tax_rate = s7 / sum1
+    EV = s2 + s12
+    FCFF = pd.DataFrame((s11 + s8 * (1 - tax_rate) - s1) / EV).fillna(0)
+    # Replacing infinite values by nan
+    FCFF = FCFF.replace([np.inf, -np.inf], np.nan)
 
-    # %% Saving the data
+    # %% Saving the FCFF data
 
     # writing to excel
 
-    writer = pd.ExcelWriter(paths['Fundamentals.xlsx'])
-    for z in fundamentals.keys():
-        fundamentals[z].to_excel(writer, z[:3])
+    writer = pd.ExcelWriter(paths['FCFF.xlsx'])
+    FCFF.to_excel(writer, 'FCFF')
     writer.save()
 
     # writing to hd5 file
-    fNames = list(fundamentals.keys())
-    store = pd.HDFStore(paths['Fundamentals.h5'])
-    row = 0
-    for x in fundamentals:
-        store[fNames[row]] = fundamentals[x]
-        row = row + 1
+    store = pd.HDFStore(paths['FCFF.h5'])
+    store['FCFF'] = FCFF
     store.close()
 
     # %% Linking gvKey and Premno
 
     df_Linkage = pd.read_excel(paths['permno_gvkeys_linkage.xlsx'])
     df_Linkage1 = df_Linkage[["Global Company Key", "Historical CRSP PERMNO Link to COMPUSTAT Record",
-                              "Historical CRSP PERMCO Link to COMPUSTAT Record"]]
+                              "Historical CRSP PERMCO Link to COMPUSTAT Record", "Company Name"]]
     df_Linkage2 = df_Linkage1.drop_duplicates(keep='last')
 
     # %% Saving Linkage file to excel and HD5
