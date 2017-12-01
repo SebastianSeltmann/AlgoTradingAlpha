@@ -499,7 +499,7 @@ def evaluate_strategy(
         if not i+1 >= len(stockprices.index):
             portfolio['cash'].iloc[i+1] = portfolio['cash'].iloc[i] - payments + earnings
             # very rough approximation
-            portfolio['metrics'].iloc[i + 1] = portfolio['cash'].iloc[i+1]
+            portfolio['metrics'].loc[stockprices.index[i + 1], 'portfolio_value'] = portfolio['cash'].iloc[i+1].cash
 
 
 
