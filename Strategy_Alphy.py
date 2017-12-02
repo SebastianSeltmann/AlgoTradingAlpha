@@ -327,20 +327,17 @@ def call_options_data():
 
 # # Optimization Process
 def objective(
-        coverage,
-        quantile,
-        strike_0,
-        strike_1,
+        params,
         stockprices,
         options,
         FCFF,
         VIX,
         membership,):
-    results = evaluate_strategy(
-        coverage,
-        quantile,
-        strike_0,
-        strike_1,
+    portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown = evaluate_strategy(
+        params[0], #coverage,
+        params[1], #quantile,
+        params[2], #strike_0,
+        params[3], #strike_1,
         stockprices,
         options,
         FCFF,
@@ -348,7 +345,7 @@ def objective(
         membership,)
     # We are interested in maximizing the first of the evaluation metrics
     # We achieve this by minimizing the negative of the first metric
-    return - (results[0])
+    return - (portfolio_sharperatio)
 
 def optimize(
             stockprices,
@@ -364,27 +361,48 @@ def optimize(
         (0.1,1),        # coverage
         (0.01,1),       # quantile
         (None,None),    # strike_0
-        (None,None),    # strike_1
+        (None,None)     # strike_1
     ]
 
-    initial_guesses = [0.9, 0.9, 0, 1]
+    initial_guesses = [0.9, 0.9, 1, 0]
+    minimization = minimize(
+        fun = objective,
+        x0 = initial_guesses,
+        args = (stockprices, options, FCFF, VIX, membership),
+        bounds = bounds
+    )
+    print(minimization)
     (
         optimized_coverage,
         optimized_quantile,
         optimized_strike_0,
         optimized_strike_1,
-    ) = minimize(
-        objective,
-        initial_guesses,
-
-        args=(stockprices, options, FCFF, VIX, membership),
-        bounds=bounds
-    )
+    ) = minimization.x
     return (optimized_coverage, optimized_quantile, optimized_strike_0, optimized_strike_1)
 
+'''
+# Execute these lines to test the functions:
+
+stockprices, prices_raw, comp_const, CRSP_const, VIX = load_data()
+pricy = stockprices.iloc[:5,:5]
+stockprices = pricy
+FCFF = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), len(pricy.columns))), index=pricy.index, columns=pricy.columns)
+VIX = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), 1)), index=pricy.index, columns=['Adj Close'])
+
+optimize(stockprices,options,FCFF,VIX,np.nan)
+objective(0.9,0.9,0,1,stockprices,options,FCFF,VIX,np.nan)
+'''
 
 # # Strategy Evaluation
 
+def max_dd(ser):
+    ser    = pd.Series(ser)
+    zzmax  = ser.expanding().max()
+    zzmin  = ser[-1::-1].expanding().min()[-1::-1]
+    mdd    = (zzmin/zzmax-1).min()
+    return mdd
+
+# ToDo: implement filtering based on membership
 def evaluate_strategy(
         coverage=1,
         quantile=0.5,
@@ -396,19 +414,20 @@ def evaluate_strategy(
         VIX=None,
         membership=None,
         initial_cash = 10**6,
-        rebalancing_frequency = 4,):
+        rebalancing_frequency = 4,
+        ddwin = 30):
 
     # define initial portfolio with cash only
     # loop through all assigned dates
     # call timestep at each period
     # determine overall success after all time
     # return report of success
-
+'''
     pricy = stockprices.iloc[:5,:5]
     stockprices = pricy
     FCFF = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), len(pricy.columns))), index=pricy.index, columns=pricy.columns)
     VIX = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), 1)), index=pricy.index, columns=['Adj Close'])
-
+'''
     '''
     day = dt.datetime.strptime('1990-01-03', '%Y-%m-%d')
     day2 = dt.datetime.strptime('1990-01-04', '%Y-%m-%d')
@@ -445,11 +464,8 @@ def evaluate_strategy(
     stockprices_filtered = stockprices + FCFF_filtered*0
     target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["Adj Close"], axis="index")
 
-    options_filtered = options + FCFF_filtered*0
-
-
     portfolio = {}
-    portfolio['metrics']            = pd.DataFrame(index=stockprices.index, columns=['portfolio_value', 'payments'])
+    portfolio['metrics']            = pd.DataFrame(index=stockprices.index, columns=['portfolio_value', 'payments', 'earnings', 'returns'])
     portfolio['cash']               = pd.DataFrame(index=stockprices.index, columns=['cash'])
     portfolio['amounts']            = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
     portfolio["strikes"]            = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
@@ -495,6 +511,7 @@ def evaluate_strategy(
         np.nan_to_num(portfolio['amounts'].iloc[i] * portfolio['price'].iloc[i])
         earnings = sum((portfolio['amounts'].iloc[i] * portfolio['price'].iloc[i]).apply(lambda x: np.nan_to_num(x)))
         portfolio['metrics'].loc[stockprices.index[i],'payments'] = payments
+        portfolio['metrics'].loc[stockprices.index[i],'earnings'] = earnings
 
         if not i+1 >= len(stockprices.index):
             portfolio['cash'].iloc[i+1] = portfolio['cash'].iloc[i] - payments + earnings
@@ -502,21 +519,22 @@ def evaluate_strategy(
             portfolio['metrics'].loc[stockprices.index[i + 1], 'portfolio_value'] = portfolio['cash'].iloc[i+1].cash
 
 
+    ann = 251 / rebalancing_frequency
+    portfolio['metrics'].returns = portfolio['metrics'].portfolio_value.pct_change()
+    portfolio_returns       = portfolio['metrics'].returns.mean()*ann
+    portfolio_vola          = portfolio['metrics'].returns.std()*np.sqrt(ann)
+    portfolio_sharperatio   = portfolio_returns / portfolio_vola
+    portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
 
-
-
-
-    metric_of_success1 = 1
-    metric_of_success2 = 1
-    return (metric_of_success1, metric_of_success2)
+    return (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
 
 '''
 stockprices, prices_raw, comp_const, CRSP_const, VIX = load_data()
 evaluate_strategy(stockprices = stockprices)
 '''
 
-
-# # TimeStep
+'''
+# # TimeStep (obsolete)
 
 def timestep(
         time,
@@ -539,19 +557,7 @@ def timestep(
     portfolio_new = portfolio
     return portfolio_new
 '''
-def load_data():
-    stockprices = pd.DataFrame(np.random.randn(6, 4), index=dates, columns=list('ABCD'))
-    characteristics = pd.DataFrame(np.random.randn(6, 4), index=dates, columns=list('ABCD'))
-    factors = pd.DataFrame(np.random.randn(6, 4), index=dates, columns=list('ABCD'))
 
-    sp500_members = "todo"
-    options = pd.DataFrame()
-    for file in paths['options'][0:1]:
-        data = options.append(pd.read_csv(file))[['id', 'date', 'strike_price', 'best_bid']]
-        options = data
-
-    return stockprices, characteristics,factors, options
-'''
 # # Main: Data Loading & Approach Evaluation
 
 # load the datasets:
