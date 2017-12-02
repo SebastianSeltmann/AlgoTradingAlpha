@@ -36,6 +36,8 @@ paths['Linkage.xlsx']               = rootpath + "Linkage.xlsx"
 paths['Linkage.h5']                 = rootpath + "Linkage.h5"
 paths['all_options_csv']            = rootpath + "all_options.csv"
 paths['all_options_h5']             = rootpath + "all_options.h5"
+paths['all_options2_h5']            = rootpath + "all_options2.h5"
+paths['all_options3_h5']            = rootpath + "all_options3.h5"
 paths['options'] = []
 
 for y in range(1996, 2017):
@@ -91,6 +93,7 @@ def store_sp500():
             y = prices_sp50[prices_sp50['permno'] == i][['date', 'prc']].set_index('date', drop=True)
             y.columns = [i]
             prc_merge = pd.merge(prc_merge, y, how='outer', left_index=True, right_index=True)
+
 
     ## ----------------------------- EXPORT --------------------------------
 
@@ -272,6 +275,7 @@ def load_data():
     comp_const = store['Compustat_const']
     CRSP_const = store['CRSP_const']
     store.close()
+
     store = pd.HDFStore(paths['vix'])
     vix = store['vix']
     store.close()
@@ -289,7 +293,7 @@ def load_chunked_data(chunksize=251):
 
 def store_options(CRSP_const):
     #counter = 0
-    store = pd.HDFStore(paths['all_options_h5'])
+    store = pd.HDFStore(paths['all_options2_h5'])
     st_y  = pd.to_datetime(CRSP_const['start'])
     en_y  = pd.to_datetime(CRSP_const['ending'])
     for file in paths['options']:
@@ -305,7 +309,7 @@ def store_options(CRSP_const):
             listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'strike_price']],
                              const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
             print(listO.shape)
-            store.append('options', listO, index = False)
+            store.append('options2', listO, index = False, data_columns = True)
 
             '''
             if counter == 0:
@@ -319,10 +323,72 @@ def store_options(CRSP_const):
     store.close()
 
 
+
+
+    ## Create constituents data frame
+    CRSP_const = CRSP_const[CRSP_const['ending'] > '1996-01-01']
+
+    ids = CRSP_const
+
+    ## cut the prices data to start in 1996
+    dates_p = np.asarray(prices.index)
+    prices = prices[dates_p >= pd.datetime.date(pd.datetime(1996, 1, 4))]
+
+    ##
+    store = pd.HDFStore(paths['all_options3_h5'])
+    st_y = pd.to_datetime(CRSP_const['start'])
+    en_y = pd.to_datetime(CRSP_const['ending'])
+    df = pd.DataFrame(columns = ids, index = prices.index)
+    for file in paths['options']:
+        with open(file, 'r') as o:
+            print(file)
+            data = pd.read_csv(o)
+            year_index = file.find('rawopt_')
+            cur_y = file[year_index + 7:year_index + 7 + 4]
+            idx1 = st_y <= cur_y
+            idx2 = en_y >= cur_y
+            idx = idx1 & idx2
+            const = CRSP_const.loc[idx, :].reset_index(drop=True)
+            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'strike_price']],
+                             const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
+            print(listO.shape)
+
+            temp = listO['date']
+            listO['date'] = pd.to_datetime(temp, format = '%d%b%Y')
+
+            dates_index = listO['date'].drop_duplicates()
+            listO = listO.set_index('date')
+            listO = listO.set_index('id', append=True)
+            for date in dates_index:
+                for permno in const:
+                    index = listO.groupby(listO.index)
+                    df.loc[date, permno] = index.get_group((date, permno))
+
+            store.append('options', df, index=False)
+
+            '''
+            if counter == 0:
+                with open(paths['all_options_csv'], 'w') as f:
+                    listO.to_csv(f, header=True, index=False)
+            else:
+                with open(paths['all_options_csv'], 'a') as f:
+                    listO.to_csv(f, header=False, index=False)
+            counter = counter + 1
+            '''
+    store.close()
+
+    ##
+
 def call_options_data():
 
-    store = pd.HDFStore(paths['all_options_h5'])
-    x = store['options']
+    store = pd.HDFStore(paths['all_options2_h5'])
+    x     = store.select(key = 'options2', where = 'date == ["02JAN2000"]')
+
+    store.close()
+
+    store = pd.HDFStore(rootpath + "draft_options2.h5")
+    x = store.append('options2', x, data_columns = True)
+    store['options2'] = x
     store.close()
 
 # # Optimization Process
