@@ -393,20 +393,17 @@ def call_options_data():
 
 # # Optimization Process
 def objective(
-        coverage,
-        quantile,
-        strike_0,
-        strike_1,
+        params,
         stockprices,
         options,
         FCFF,
         VIX,
         membership,):
-    results = evaluate_strategy(
-        coverage,
-        quantile,
-        strike_0,
-        strike_1,
+    portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown = evaluate_strategy(
+        params[0], #coverage,
+        params[1], #quantile,
+        params[2], #strike_0,
+        params[3], #strike_1,
         stockprices,
         options,
         FCFF,
@@ -414,7 +411,7 @@ def objective(
         membership,)
     # We are interested in maximizing the first of the evaluation metrics
     # We achieve this by minimizing the negative of the first metric
-    return - (results[0])
+    return - (portfolio_sharperatio)
 
 def optimize(
             stockprices,
@@ -430,29 +427,50 @@ def optimize(
         (0.1,1),        # coverage
         (0.01,1),       # quantile
         (None,None),    # strike_0
-        (None,None),    # strike_1
+        (None,None)     # strike_1
     ]
 
-    initial_guesses = [0.9, 0.9, 0, 1]
+    initial_guesses = [0.9, 0.9, 1, 0]
+    minimization = minimize(
+        fun = objective,
+        x0 = initial_guesses,
+        args = (stockprices, options, FCFF, VIX, membership),
+        bounds = bounds
+    )
+    print(minimization)
     (
         optimized_coverage,
         optimized_quantile,
         optimized_strike_0,
         optimized_strike_1,
-    ) = minimize(
-        objective,
-        initial_guesses,
-
-        args=(stockprices, options, FCFF, VIX, membership),
-        bounds=bounds
-    )
+    ) = minimization.x
     return (optimized_coverage, optimized_quantile, optimized_strike_0, optimized_strike_1)
 
+'''
+# Execute these lines to test the functions:
+
+stockprices, prices_raw, comp_const, CRSP_const, VIX = load_data()
+pricy = stockprices.iloc[:5,:5]
+stockprices = pricy
+FCFF = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), len(pricy.columns))), index=pricy.index, columns=pricy.columns)
+VIX = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), 1)), index=pricy.index, columns=['Adj Close'])
+
+optimize(stockprices,options,FCFF,VIX,np.nan)
+objective(0.9,0.9,0,1,stockprices,options,FCFF,VIX,np.nan)
+'''
 
 # # Strategy Evaluation
 
+def max_dd(ser):
+    ser    = pd.Series(ser)
+    zzmax  = ser.expanding().max()
+    zzmin  = ser[-1::-1].expanding().min()[-1::-1]
+    mdd    = (zzmin/zzmax-1).min()
+    return mdd
+
+# ToDo: implement filtering based on membership
 def evaluate_strategy(
-        coverage =None,
+        coverage=1,
         quantile=0.5,
         strike_0=1,
         strike_1=0.01,
@@ -461,19 +479,21 @@ def evaluate_strategy(
         FCFF=None,
         VIX=None,
         membership=None,
-        cash = 10**6, ):
+        initial_cash = 10**6,
+        rebalancing_frequency = 4,
+        ddwin = 30):
 
     # define initial portfolio with cash only
     # loop through all assigned dates
     # call timestep at each period
     # determine overall success after all time
     # return report of success
-
+'''
     pricy = stockprices.iloc[:5,:5]
     stockprices = pricy
     FCFF = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), len(pricy.columns))), index=pricy.index, columns=pricy.columns)
-    VIX = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), 1)), index=pricy.index, columns=['VIX'])
-
+    VIX = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), 1)), index=pricy.index, columns=['Adj Close'])
+'''
     '''
     day = dt.datetime.strptime('1990-01-03', '%Y-%m-%d')
     day2 = dt.datetime.strptime('1990-01-04', '%Y-%m-%d')
@@ -494,13 +514,13 @@ def evaluate_strategy(
     options = pd.DataFrame(index=pricy.index, columns=pricy.columns)
     def single_optionset():
         return pd.DataFrame([
-            [20,7,np.random.randint(0,10),np.random.rand()],
-            [30,7,np.random.randint(0,10),np.random.rand()],
-            [40,7,np.random.randint(0,10),np.random.rand()],
-            [50,7,np.random.randint(0,10),np.random.rand()],
-            [60,7,np.random.randint(0,10),np.random.rand()],
+            [20,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
+            [30,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
+            [40,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
+            [50,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
+            [60,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
             ],
-            columns=['strike','daysToExpiry','price','delta']
+            columns=['strike','daysToExpiry','price','delta','implied_volatility']
         )
     options = options.applymap(lambda x: single_optionset())
 
@@ -508,38 +528,79 @@ def evaluate_strategy(
     # keeping only the top q quantile
     FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(quantile,axis=1))]
     stockprices_filtered = stockprices + FCFF_filtered*0
-    target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["VIX"], axis="index")
-
-    options_filtered = options + FCFF_filtered*0
+    target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["Adj Close"], axis="index")
 
     portfolio = {}
-    portfolio['metrics']        = pd.DataFrame(index=stockprices.index, columns=['portfolio_value'])
-    portfolio['cash']           = pd.DataFrame(index=stockprices.index, columns=['cash'])
-    portfolio['amounts']        = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-    portfolio["strikes"]        = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-    portfolio["daysToExpiry"]   = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-    portfolio["price"]          = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio['metrics']            = pd.DataFrame(index=stockprices.index, columns=['portfolio_value', 'payments', 'earnings', 'returns'])
+    portfolio['cash']               = pd.DataFrame(index=stockprices.index, columns=['cash'])
+    portfolio['amounts']            = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio["strikes"]            = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio["daysToExpiry"]       = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio["expiry"]             = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio["price"]              = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio["delta"]              = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+    portfolio["implied_volatility"] = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
 
     for day in options.index:
         for stock in options.loc[day].index:
             opday = options.loc[day][stock]
             if not np.isnan(target_strike.loc[day,stock]):
                 best_fit_index = opday.iloc[np.absolute((opday['strike'] - target_strike.loc[day,stock]).values).argsort()].index[0]
-                portfolio["strikes"].loc[day, stock]        = opday.loc[best_fit_index]['strike']
-                portfolio["daysToExpiry"].loc[day, stock]   = opday.loc[best_fit_index]['daysToExpiry']
-                portfolio["price"]                          = opday.loc[best_fit_index]['price']
+                portfolio["strikes"].loc[day, stock]            = opday.loc[best_fit_index]['strike']
+                portfolio["daysToExpiry"].loc[day, stock]       = opday.loc[best_fit_index]['daysToExpiry']
+                portfolio["expiry"].loc[day, stock]             = day + dt.timedelta(days=opday.loc[best_fit_index]['daysToExpiry'])
+                portfolio["price"].loc[day, stock]              = opday.loc[best_fit_index]['price']
+                portfolio["delta"].loc[day, stock]              = opday.loc[best_fit_index]['delta']
+                portfolio["implied_volatility"].loc[day, stock] = opday.loc[best_fit_index]['implied_volatility']
 
-    metric_of_success1 = 1
-    metric_of_success2 = 1
-    return (metric_of_success1, metric_of_success2)
+
+    risk = portfolio["implied_volatility"] * portfolio["delta"]
+
+    weights = (risk.T / risk.sum(axis=1)).T
+    allocation = (weights / stockprices) / coverage
+    portfolio['metrics'].loc[stockprices.index[0], 'portfolio_value'] = initial_cash
+    portfolio['cash'].iloc[0] = initial_cash
+
+    for i in range(len(stockprices.index)):
+        investment_volume = portfolio['metrics'].portfolio_value.iloc[i] / rebalancing_frequency
+        portfolio['amounts'].iloc[i] = ((investment_volume * allocation.iloc[i])).apply(lambda x: np.floor(x))
+        payments = 0
+        for stock in stockprices.columns:
+            for j in range(-5,0):
+                if i+j > 0:
+                    expiry = portfolio["expiry"].iloc[i+j].loc[stock]
+                    if (not pd.isnull(expiry)) and expiry >= stockprices.index[i]:
+                        payments = payments + max(0,portfolio["strikes"].iloc[i+j].loc[stock] - stockprices.iloc[i].loc[stock])
+                        portfolio['expiry'].loc[stockprices.index[i+j], stock] = np.nan
+                        #payments = payments + sum(portfolio["strikes"].iloc[i+j] - stockprices.iloc[i]).apply(lambda x: max(0,x))
+
+        np.nan_to_num(portfolio['amounts'].iloc[i] * portfolio['price'].iloc[i])
+        earnings = sum((portfolio['amounts'].iloc[i] * portfolio['price'].iloc[i]).apply(lambda x: np.nan_to_num(x)))
+        portfolio['metrics'].loc[stockprices.index[i],'payments'] = payments
+        portfolio['metrics'].loc[stockprices.index[i],'earnings'] = earnings
+
+        if not i+1 >= len(stockprices.index):
+            portfolio['cash'].iloc[i+1] = portfolio['cash'].iloc[i] - payments + earnings
+            # very rough approximation
+            portfolio['metrics'].loc[stockprices.index[i + 1], 'portfolio_value'] = portfolio['cash'].iloc[i+1].cash
+
+
+    ann = 251 / rebalancing_frequency
+    portfolio['metrics'].returns = portfolio['metrics'].portfolio_value.pct_change()
+    portfolio_returns       = portfolio['metrics'].returns.mean()*ann
+    portfolio_vola          = portfolio['metrics'].returns.std()*np.sqrt(ann)
+    portfolio_sharperatio   = portfolio_returns / portfolio_vola
+    portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
+
+    return (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
 
 '''
-stockprices, prices_raw, comp_const, CRSP_const = load_data()
+stockprices, prices_raw, comp_const, CRSP_const, VIX = load_data()
 evaluate_strategy(stockprices = stockprices)
 '''
 
-
-# # TimeStep
+'''
+# # TimeStep (obsolete)
 
 def timestep(
         time,
@@ -562,19 +623,7 @@ def timestep(
     portfolio_new = portfolio
     return portfolio_new
 '''
-def load_data():
-    stockprices = pd.DataFrame(np.random.randn(6, 4), index=dates, columns=list('ABCD'))
-    characteristics = pd.DataFrame(np.random.randn(6, 4), index=dates, columns=list('ABCD'))
-    factors = pd.DataFrame(np.random.randn(6, 4), index=dates, columns=list('ABCD'))
 
-    sp500_members = "todo"
-    options = pd.DataFrame()
-    for file in paths['options'][0:1]:
-        data = options.append(pd.read_csv(file))[['id', 'date', 'strike_price', 'best_bid']]
-        options = data
-
-    return stockprices, characteristics,factors, options
-'''
 # # Main: Data Loading & Approach Evaluation
 
 # load the datasets:
