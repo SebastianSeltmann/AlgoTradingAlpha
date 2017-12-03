@@ -22,6 +22,7 @@ paths = {}
 paths['quandl_key']                 = rootpath + "quandl_key.txt"
 paths['stockprices']                = rootpath + "stockprices.h5"
 paths['vix']                        = rootpath + "vix.h5"
+paths['FCFF']                       = rootpath + "FCFF.h5"
 paths['pseudo_store']               = rootpath + "retdata.h5"
 paths['sp500list']                  = rootpath + "Constituents.xlsx"
 paths['sp500_permnos']              = rootpath + "SP500_permnos.csv"
@@ -38,6 +39,7 @@ paths['all_options_csv']            = rootpath + "all_options.csv"
 paths['all_options_h5']             = rootpath + "all_options.h5"
 paths['all_options2_h5']            = rootpath + "all_options2.h5"
 paths['all_options3_h5']            = rootpath + "all_options3.h5"
+paths['options_nested_df']          = rootpath + "options_nested_df.h5"
 paths['options'] = []
 
 for y in range(1996, 2017):
@@ -114,6 +116,7 @@ def store_sp500():
     return prc_merge, crsp_id
 
 def store_fundamentals():
+    print('reading accounting data excel')
     df_AccountingData = pd.read_excel(paths['fn_AccountingData_xlsx'])
 
     # %%
@@ -123,7 +126,9 @@ def store_fundamentals():
 
     df_AccountingData["New Date"] = 0
     df_AccountingData["Final Date"] = 0
-
+    print('labelling fiscal quarters uniformally Part 1/3')
+    df_AccountingData.loc[df_AccountingData.index[5],'Final Date']
+    #df_AccountingData.iloc[,21] =
     row = 0
     for i in df_AccountingData["Fiscal Quarter"]:
         if i == 1:
@@ -136,12 +141,14 @@ def store_fundamentals():
             df_AccountingData.iloc[row, 21] = "1231"
         row = row + 1
 
+    print('labelling fiscal quarters uniformally Part 2/3')
     row = 0
     for d in df_AccountingData["Fiscal Year"]:
         df_AccountingData.iloc[row, 22] = str(df_AccountingData.iloc[row, 2].round()) + str(
             df_AccountingData.iloc[row, 21])
         row = row + 1
 
+    print('labelling fiscal quarters uniformally Part 3/3')
     df_AccountingData["Final Date"] = pd.to_datetime(df_AccountingData["Final Date"], format="%Y/%m/%d")
 
     df_AccountingData["Final Date"] = [dt.datetime.strftime(d, "%Y/%m/%d") for d in df_AccountingData["Final Date"]]
@@ -156,19 +163,19 @@ def store_fundamentals():
 
     fundamentals = {}
     i = 0
-
+    print('Pivoting accounting data')
     for col in df_AccountingData.columns[6:]:
         #   x= pd.pivot_table(df_AccountingData,index=["Data Date"],columns=["Global Company Key"],values=[col],fill_value=0)  # Take output file=fundamentals1.xlsx to compare
         x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col],
                            fill_value=0)
         x.columns = x.columns.droplevel()
         fundamentals[col] = x
-        print(i)
         i = i + 1
 
     # %% Calculation of FCFF
     # FCFF = [CFO + Interest Expense (1- tax rate) - CAPEX]/(Enterprise Value)
 
+    print('Calculating FCFF')
     tax_rate=fundamentals['Income Taxes - Total']/(fundamentals['Income Taxes - Total']+fundamentals['Net Income (Loss)'])
     EV=fundamentals['Long-Term Debt - Total']+fundamentals['Market Value - Total']
     fundamentals['FCFF'] =(fundamentals['Operating Activities - Net Cash Flow']+fundamentals['Interest and Related Expense- Total']*(1-tax_rate)-fundamentals['Capital Expenditures'])/EV
@@ -177,12 +184,15 @@ def store_fundamentals():
 
     # writing to excel
 
+    print('Storing fundamentals in excel')
     writer = pd.ExcelWriter(paths['Fundamentals.xlsx'])
     for z in fundamentals.keys():
         fundamentals[z].to_excel(writer, z[:3])
     writer.save()
 
     # writing to hd5 file
+
+    print('Storing fundamentals in hdf')
     fNames = list(fundamentals.keys())
     store = pd.HDFStore(paths['Fundamentals.h5'])
     row = 0
@@ -191,8 +201,8 @@ def store_fundamentals():
         row = row + 1
     store.close()
 
+def store_linkage():
     # %% Linking gvKey and Premno
-
     df_Linkage = pd.read_excel(paths['permno_gvkeys_linkage.xlsx'])
     df_Linkage1 = df_Linkage[["Global Company Key", "Historical CRSP PERMNO Link to COMPUSTAT Record",
                               "Historical CRSP PERMCO Link to COMPUSTAT Record"]]
@@ -207,7 +217,28 @@ def store_fundamentals():
     store = pd.HDFStore(paths['Linkage.h5'])
     store['Linkage'] = df_Linkage2
     store.close()
+'''
+def store_cleaned_FCFF(prices, linkage):
 
+    store = pd.HDFStore(paths['FCFF'])
+    FCFF = store['FCFF']
+    store.close()
+    FCFF = FCFF.applymap(lambda x: np.nan if x == 0.0 else x)
+    FCFF.columns
+
+
+    #FCFF.loc[:,'pdDates'] = list(x.date() for x in list(pd.to_datetime(vix.index)))
+    #fitted_FCFF = prices.merge(FCFF, how='left', right_on='pdDates', left_index=True)
+    fitted_FCFF = prices.merge(FCFF, how='left', right_index=True, left_index=True)
+    #fitted_FCFF.drop('pdDates',axis=1, inplace= True)
+    fitted_FCFF.drop(prices.columns, axis=1, inplace=True)
+    fitted_FCFF.columns
+    prices.columns
+
+    store = pd.HDFStore(paths['vix'])
+    store['vix'] = fitted_vix
+    store.close()
+'''
 def store_vix(prices):
     '''
     # Earliest VIX available from quandl is 2005
@@ -244,54 +275,7 @@ def store_vix(prices):
     store['vix'] = fitted_vix
     store.close()
 
-
-def store_data():
-    # This function is called manually
-    # it needs to be called only once
-
-    # Retrieve Data from original sources
-    # Clean them appropriately
-    # Store them in a format ready to be loaded by main process:
-    # -  stockprices,
-    # -  characteristics,
-    # -  factors,
-    # -  options,
-    '''
-    F = open(paths['quandl_key'], "r")
-    quandl_key = F.read()
-    F.close()
-    '''
-    prices, CRSP_const = store_sp500()
-    store_fundamentals()
-    store_options(CRSP_const)
-    store_vix(prices)
-
-def load_data():
-
-    # # Data Storing and calling
-    store = pd.HDFStore(paths['h5 constituents & prices'])
-    prices = store['Prices']
-    prices_raw = store['Prices_raw']
-    comp_const = store['Compustat_const']
-    CRSP_const = store['CRSP_const']
-    store.close()
-
-    store = pd.HDFStore(paths['vix'])
-    vix = store['vix']
-    store.close()
-
-    return prices, prices_raw, comp_const, CRSP_const, vix
-
-def load_chunked_data(chunksize=251):
-    reader_stockprices      = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
-    #reader_options          = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_options          = pd.read_hdf(paths['all_options_h5'], 'options', chunksize=chunksize)
-    reader_FCFF             = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_membership       = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_vix              = pd.read_hdf(paths['vix'], sep=',', chunksize=chunksize)
-    return zip(reader_stockprices, reader_options, reader_FCFF, reader_membership)
-
-def store_options(CRSP_const):
+def store_options(CRSP_const, prices):
     #counter = 0
     store = pd.HDFStore(paths['all_options2_h5'])
     st_y  = pd.to_datetime(CRSP_const['start'])
@@ -321,9 +305,6 @@ def store_options(CRSP_const):
             counter = counter + 1
             '''
     store.close()
-
-
-
 
     ## Create constituents data frame
     CRSP_const = CRSP_const[CRSP_const['ending'] > '1996-01-01']
@@ -378,6 +359,103 @@ def store_options(CRSP_const):
     store.close()
 
     ##
+
+def store_options_as_nested_df(CRSP_const, prices):
+    store = pd.HDFStore(paths['options_nested_df'])
+    for file in paths['options']:
+        #with open(file, 'r') as file:
+
+        print(file)
+        year_index = file.find('rawopt_')
+        year = int(file[year_index + 7:year_index + 7 + 4])
+
+        unprocessed_data = pd.read_csv(file)
+        dt.datetime.strptime(unprocessed_data.date[0], '%d%b%Y')
+
+        unprocessed_data.loc[:,'formatted_day'] = list(dt.datetime.strptime(x, '%d%b%Y').date() for x in unprocessed_data.date)
+        counter = 0
+        relevant_days_index = prices[dt.date(year,1,1):dt.date(year+1,1,1)].index
+
+        target = len(relevant_days_index)*len(prices.columns)
+
+        optionsdata = pd.DataFrame(index=relevant_days_index, columns=prices.columns)
+        for day in relevant_days_index:
+            for stock in prices.columns:
+                #print(day,stock)
+                optionsday = unprocessed_data[(unprocessed_data.formatted_day == day) | (unprocessed_data.id == stock)]
+                if len(optionsday.index) == 0:
+                    optionsdata.at[day, stock] = np.nan
+                else:
+                    formatted_optionsday = pd.DataFrame(
+                        columns=['strike', 'daysToExpiry', 'price', 'delta', 'implied_volatiliy']
+                    )
+                    formatted_optionsday.strike             = optionsday.strike_price
+                    formatted_optionsday.daysToExpiry       = optionsday.days
+                    formatted_optionsday.price              = optionsday.best_bid
+                    formatted_optionsday.delta              = - optionsday.delta # removing the negativity, we don't need it
+                    formatted_optionsday.implied_volatiliy  = optionsday.impl_volatility
+                    optionsdata.at[day,stock] = formatted_optionsday
+                counter = counter + 1
+                print (str(year) + ': ' + str(counter/target) + ' | ' + str(counter) + '/' + str(target))
+                #if counter % 5000 == 0:
+                #    print (str(counter/target) + ' | ' + str(counter) + '/' + str(target))
+        store.append('options', optionsdata, index=False)
+    store.close()
+
+
+def store_data():
+    # This function is called manually
+    # it needs to be called only once
+
+    # Retrieve Data from original sources
+    # Clean them appropriately
+    # Store them in a format ready to be loaded by main process:
+    # -  stockprices,
+    # -  characteristics,
+    # -  factors,
+    # -  options,
+    '''
+    F = open(paths['quandl_key'], "r")
+    quandl_key = F.read()
+    F.close()
+    '''
+    prices, CRSP_const = store_sp500()
+    store_fundamentals()
+    store_options(CRSP_const)
+    store_vix(prices)
+
+def load_data():
+
+    # # Data Storing and calling
+    store = pd.HDFStore(paths['h5 constituents & prices'])
+    prices = store['Prices']
+    prices_raw = store['Prices_raw']
+    comp_const = store['Compustat_const']
+    CRSP_const = store['CRSP_const']
+    store.close()
+
+    store = pd.HDFStore(paths['vix'])
+    vix = store['vix']
+    store.close()
+
+    store = pd.HDFStore(paths['FCFF'])
+    FCFF = store['FCFF']
+    store.close()
+
+    store = pd.HDFStore(paths['Linkage.h5'])
+    linkage = store['Linkage']
+    store.close()
+
+    return prices, prices_raw, comp_const, CRSP_const, vix, FCFF
+
+def load_chunked_data(chunksize=251):
+    reader_stockprices      = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
+    #reader_options          = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_options          = pd.read_hdf(paths['all_options_h5'], 'options', chunksize=chunksize)
+    reader_FCFF             = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_membership       = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_vix              = pd.read_hdf(paths['vix'], sep=',', chunksize=chunksize)
+    return zip(reader_stockprices, reader_options, reader_FCFF, reader_membership)
 
 def call_options_data():
 
@@ -488,12 +566,12 @@ def evaluate_strategy(
     # call timestep at each period
     # determine overall success after all time
     # return report of success
-'''
+    '''
     pricy = stockprices.iloc[:5,:5]
     stockprices = pricy
     FCFF = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), len(pricy.columns))), index=pricy.index, columns=pricy.columns)
     VIX = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), 1)), index=pricy.index, columns=['Adj Close'])
-'''
+    '''
     '''
     day = dt.datetime.strptime('1990-01-03', '%Y-%m-%d')
     day2 = dt.datetime.strptime('1990-01-04', '%Y-%m-%d')
