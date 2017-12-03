@@ -11,6 +11,7 @@ import pandas_datareader.data as web
 #import openpyxl
 import quandl
 import wrds
+import trace
 
 
 ## ----------------------- SETTINGS ----------------------------------
@@ -364,44 +365,51 @@ def store_options_as_nested_df(CRSP_const, prices):
     store = pd.HDFStore(paths['options_nested_df'])
     for file in paths['options']:
         #with open(file, 'r') as file:
-
-        print(file)
+        #file = paths['options'][0]
+        print('reading: ' + file)
         year_index = file.find('rawopt_')
         year = int(file[year_index + 7:year_index + 7 + 4])
 
         unprocessed_data = pd.read_csv(file)
         dt.datetime.strptime(unprocessed_data.date[0], '%d%b%Y')
 
+
+        print('transforming dates into usable format')
         unprocessed_data.loc[:,'formatted_day'] = list(dt.datetime.strptime(x, '%d%b%Y').date() for x in unprocessed_data.date)
         counter = 0
         relevant_days_index = prices[dt.date(year,1,1):dt.date(year+1,1,1)].index
 
         target = len(relevant_days_index)*len(prices.columns)
-
         optionsdata = pd.DataFrame(index=relevant_days_index, columns=prices.columns)
+
+        def to_date(string):
+            return dt.datetime.strptime(string, '%Y-%m-%d').date()
+
         for day in relevant_days_index:
+            CRSP_const
             for stock in prices.columns:
-                #print(day,stock)
-                optionsday = unprocessed_data[(unprocessed_data.formatted_day == day) | (unprocessed_data.id == stock)]
-                if len(optionsday.index) == 0:
-                    optionsdata.at[day, stock] = np.nan
+                str(int(stock))
+
+                if ((CRSP_const.PERMNO == int(stock)) & (CRSP_const.start.apply(to_date) >= day) & (CRSP_const.ending.apply(to_date) <= day)).any():
+                    optionsday = unprocessed_data[(unprocessed_data.formatted_day == day) | (unprocessed_data.id == stock)]
+                    if len(optionsday.index) == 0:
+                        optionsdata.at[day, stock] = np.nan
+                    else:
+                        formatted_optionsday = pd.DataFrame(
+                            columns=['strike', 'daysToExpiry', 'price', 'delta', 'implied_volatiliy']
+                        )
+                        formatted_optionsday.strike             = optionsday.strike_price
+                        formatted_optionsday.daysToExpiry       = optionsday.days
+                        formatted_optionsday.price              = optionsday.best_bid
+                        formatted_optionsday.delta              = - optionsday.delta # removing the negativity, we don't need it
+                        formatted_optionsday.implied_volatiliy  = optionsday.impl_volatility
+                        optionsdata.at[day,stock] = formatted_optionsday
                 else:
-                    formatted_optionsday = pd.DataFrame(
-                        columns=['strike', 'daysToExpiry', 'price', 'delta', 'implied_volatiliy']
-                    )
-                    formatted_optionsday.strike             = optionsday.strike_price
-                    formatted_optionsday.daysToExpiry       = optionsday.days
-                    formatted_optionsday.price              = optionsday.best_bid
-                    formatted_optionsday.delta              = - optionsday.delta # removing the negativity, we don't need it
-                    formatted_optionsday.implied_volatiliy  = optionsday.impl_volatility
-                    optionsdata.at[day,stock] = formatted_optionsday
+                    optionsdata.at[day, stock] = np.nan
                 counter = counter + 1
-                print (str(year) + ': ' + str(counter/target) + ' | ' + str(counter) + '/' + str(target))
-                #if counter % 5000 == 0:
-                #    print (str(counter/target) + ' | ' + str(counter) + '/' + str(target))
+                print (str(year) + ': ' + str(counter) + '/' + str(target))
         store.append('options', optionsdata, index=False)
     store.close()
-
 
 def store_data():
     # This function is called manually
