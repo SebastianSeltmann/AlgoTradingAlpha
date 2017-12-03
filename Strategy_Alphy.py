@@ -1,5 +1,6 @@
 
 ## ---------------------- IMPORT PACKAGES ----------------------------
+import sys
 import pandas as pd
 from scipy.optimize import minimize
 from sklearn.model_selection import TimeSeriesSplit
@@ -11,7 +12,8 @@ import pandas_datareader.data as web
 #import openpyxl
 import quandl
 import wrds
-import trace
+import cProfile
+import pstats
 
 
 ## ----------------------- SETTINGS ----------------------------------
@@ -41,6 +43,7 @@ paths['all_options_h5']             = rootpath + "all_options.h5"
 paths['all_options2_h5']            = rootpath + "all_options2.h5"
 paths['all_options3_h5']            = rootpath + "all_options3.h5"
 paths['options_nested_df']          = rootpath + "options_nested_df.h5"
+paths['profiler']                   = rootpath + "profiler.txt"
 paths['options'] = []
 
 for y in range(1996, 2017):
@@ -362,6 +365,7 @@ def store_options(CRSP_const, prices):
     ##
 
 def store_options_as_nested_df(CRSP_const, prices):
+    open(paths['options_nested_df'], 'w').close() #deletes previous hdf store
     store = pd.HDFStore(paths['options_nested_df'])
     for file in paths['options']:
         #with open(file, 'r') as file:
@@ -410,6 +414,17 @@ def store_options_as_nested_df(CRSP_const, prices):
                 print (str(year) + ': ' + str(counter) + '/' + str(target))
         store.append('options', optionsdata, index=False)
     store.close()
+
+
+command = 'load_data()'
+command = 'store_options_as_nested_df(CRSP_const, prices)'
+def run_profiler(command):
+    #prices, prices_raw, comp_const, CRSP_const, vix, FCFF = load_data()
+
+    cProfile.run(command, filename=paths['profiler'])
+    p = pstats.Stats(paths['profiler'])
+    p.sort_stats('cumulative').print_stats(10)
+
 
 def store_data():
     # This function is called manually
