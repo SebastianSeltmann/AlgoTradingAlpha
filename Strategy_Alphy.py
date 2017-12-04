@@ -278,7 +278,7 @@ def store_fundamentals():
     df_Prices = pd.read_excel(paths['fn_Prices_xlsx'], sheet_name="Prices")
     #file = pd.ExcelFile(paths['fn_Prices_xlsx'])
     #df_Prices = file.parse('Prices')
-    
+
     df_Prices.set_index('date', inplace=True)
     date_index = df_Prices.index
     date_index = [dt.datetime.strftime(d, "%Y/%m/%d") for d in date_index]
