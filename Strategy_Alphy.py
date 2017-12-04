@@ -52,7 +52,7 @@ paths['profiler']                   = rootpath + "profiler.txt"
 
 paths['options'] = []
 
-for y in range(1996, 1999):
+for y in range(1996, 2016):
     paths['options'].append(rootpath + "OptionsData\\rawopt_" + str(y) + "AllIndices.csv")
 
 
@@ -612,8 +612,9 @@ def load_data():
     linkage = store['Linkage']
     store.close()
 
+    # Options data sourcing (test)
     store = pd.HDFStore(paths['all_options3_h5'])
-    x = store['options1998']
+    x = store['options2015']
     store.close()
 
     return prices, prices_raw, comp_const, CRSP_const, vix, FCFF
@@ -770,7 +771,7 @@ def evaluate_strategy(
             ],
             columns=['strike','daysToExpiry','price','delta','implied_volatility']
         )
-    options = options.applymap(lambda x: single_optionset())
+    #options = options.applymap(lambda x: single_optionset())
 
 
     # keeping only the top q quantile
@@ -788,6 +789,14 @@ def evaluate_strategy(
     portfolio["price"]              = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
     portfolio["delta"]              = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
     portfolio["implied_volatility"] = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
+
+    day.date().year
+
+    reb_freq = 7
+    k = 0
+    for year in range(1996,2016):
+
+
 
     for day in options.index:
         for stock in options.loc[day].index:
@@ -886,6 +895,7 @@ def timestep(
 # call evaluate_strategy for each testing range with optimized params
 # collect metrics of success
 # report overall success of the strategy
+
 
 def main():
     metrics = []
