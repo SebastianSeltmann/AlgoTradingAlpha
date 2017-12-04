@@ -137,8 +137,7 @@ def store_fundamentals():
     df_AccountingData["New Date"] = 0
     df_AccountingData["Final Date"] = 0
     print('labelling fiscal quarters uniformally Part 1/3')
-    df_AccountingData.loc[df_AccountingData.index[5],'Final Date']
-    #df_AccountingData.iloc[,21] =
+
     row = 0
     for i in df_AccountingData["Fiscal Quarter"]:
         if i == 1:
@@ -270,7 +269,7 @@ def store_fundamentals():
 
     # %% To have common dates values for Price and FCFF1 dataframes
 
-    df_Prices = pd.read_excel(paths['permno_gvkeys_linkage.xlsx'], sheet_name="Prices")
+    df_Prices = pd.read_excel(paths['fn_Prices.xlsx'], sheet_name="Prices")
     df_Prices.set_index('date', inplace=True)
     date_index = df_Prices.index
     date_index = [dt.datetime.strftime(d, "%Y/%m/%d") for d in date_index]
@@ -308,6 +307,8 @@ def store_fundamentals():
         df_Prices1.loc[:, i] = df_Prices.loc[:, c]
         df_Prices1.columns.values[i] = c
         i = i + 1
+
+    FCFF2 = FCFF2.aaplymap (lambda x: np.nan if x == 0 else x)
 
     # %% Saving the FCFF data
     # writing to excel
@@ -587,6 +588,7 @@ def store_data():
     store_fundamentals()
     store_options(CRSP_const)
     store_vix(prices)
+
 
 def load_data():
 
