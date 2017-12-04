@@ -172,8 +172,7 @@ def store_fundamentals():
     print('Pivoting accounting data')
     for col in df_AccountingData.columns[6:]:
         #   x= pd.pivot_table(df_AccountingData,index=["Data Date"],columns=["Global Company Key"],values=[col],fill_value=0)  # Take output file=fundamentals1.xlsx to compare
-        x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col],
-                           fill_value=0)
+        x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col])
         x.columns = x.columns.droplevel()
         fundamentals[col] = x
         i = i + 1
@@ -253,7 +252,6 @@ def store_fundamentals():
     # Replacing infinite values by nan
     FCFF = FCFF.replace([np.inf, -np.inf], np.nan)
 
-def store_linkage():
     # %% Linking gvKey and Premno
     df_Linkage = pd.read_excel(paths['permno_gvkeys_linkage.xlsx'])
 
@@ -344,6 +342,26 @@ def store_linkage():
     store = pd.HDFStore(paths['Linkage.h5'])
     store['Linkage'] = df_Linkage2
     store.close()
+
+
+    # Saving the Fundamentals
+
+    # writing to xlsx file
+    writer = pd.ExcelWriter(paths['Fundamentals.xlsx'])
+    for z in fundamentals.keys():
+        fundamentals[z].to_excel(writer, z[:3])
+    writer.save()
+
+    # writing to hd5 file
+    fNames = list(fundamentals.keys())
+    store = pd.HDFStore(paths['Fundamentals.h5'])
+    row = 0
+    for x in fundamentals:
+        store[fNames[row]] = fundamentals[x]
+        row = row + 1
+    store.close()
+
+
 '''
 def store_cleaned_FCFF(prices, linkage):
 
@@ -584,7 +602,7 @@ def load_data():
     vix = store['vix']
     store.close()
 
-    store = pd.HDFStore(paths['FCFF'])
+    store = pd.HDFStore(paths['FCFF.h5'])
     FCFF = store['FCFF']
     store.close()
 
