@@ -29,7 +29,10 @@ paths['Fundamentals.xlsx']          = "C:\\AlgoTradingData\\Fundamentals.xlsx"
 paths['Fundamentals.h5']            = "C:\\AlgoTradingData\\Fundamentals.h5"
 paths['FCFF.xlsx']                  = "C:\\AlgoTradingData\\FCFF.xlsx"
 paths['FCFF.h5']                    = "C:\\AlgoTradingData\\FCFF.h5"
+paths['fn_Prices_xlsx']             = "C:\\AlgoTradingData\\Data[IDs, constituents, prices].xlsx"
 paths['permno_gvkeys_linkage.xlsx'] = "C:\\AlgoTradingData\\permno_gvkeys_linkage.xlsx"
+paths['Prices.xlsx']                = "C:\\AlgoTradingData\\Prices.xlsx"
+paths['Prices.h5']                  = "C:\\AlgoTradingData\\Prices.h5"
 paths['Linkage.xlsx']               = "C:\\AlgoTradingData\\Linkage.xlsx"
 paths['Linkage.h5']                 = "C:\\AlgoTradingData\\Linkage.h5"
 paths['all_options_csv']            = "C:\\AlgoTradingData\\all_options.csv"
@@ -111,7 +114,7 @@ def store_fundamentals():
     df_AccountingData = pd.read_excel(paths['fn_AccountingData_xlsx'])
 
     # %%
-    fundamentalNames = pd.DataFrame(df_AccountingData.columns.values)
+    #fundamentalNames = pd.DataFrame(df_AccountingData.columns.values)
 
     # %% Create new Date called as Final Date
 
@@ -140,11 +143,7 @@ def store_fundamentals():
 
     df_AccountingData["Final Date"] = [dt.datetime.strftime(d, "%Y/%m/%d") for d in df_AccountingData["Final Date"]]
 
-    # %% Processing the Data
-
-    # The below line is to make pivot table of "Long-Term Debt for all GVKeys"
-    # x= pd.pivot_table(df_AccountingData,index=["Data Date"],columns=["Global Company Key"],values=["Long-Term Debt - Total"],fill_value=0)
-    # x.columns=x.columns.droplevel()
+    # %% Processing the Fundamentals Data
 
     # Creating a dictionary. All characterstics saved as DataFrames in the Dictionary
 
@@ -234,25 +233,87 @@ def store_fundamentals():
     # Replacing infinite values by nan
     FCFF = FCFF.replace([np.inf, -np.inf], np.nan)
 
-    # %% Saving the FCFF data
-
-    # writing to excel
-
-    writer = pd.ExcelWriter(paths['FCFF.xlsx'])
-    FCFF.to_excel(writer, 'FCFF')
-    writer.save()
-
-    # writing to hd5 file
-    store = pd.HDFStore(paths['FCFF.h5'])
-    store['FCFF'] = FCFF
-    store.close()
-
     # %% Linking gvKey and Premno
 
     df_Linkage = pd.read_excel(paths['permno_gvkeys_linkage.xlsx'])
+
     df_Linkage1 = df_Linkage[["Global Company Key", "Historical CRSP PERMNO Link to COMPUSTAT Record",
-                              "Historical CRSP PERMCO Link to COMPUSTAT Record", "Company Name"]]
+                              "Historical CRSP PERMCO Link to COMPUSTAT Record", "Company Name",
+                              "First Effective Date of Link", "Last Effective Date of Link"]]
     df_Linkage2 = df_Linkage1.drop_duplicates(keep='last')
+
+    # %% Making FCFF1 DataFrame with premno as columns
+
+    FCFF1 = FCFF.reindex(columns=df_Linkage2["Global Company Key"])
+    for c in FCFF1.columns:
+        FCFF1.columns = df_Linkage2["Historical CRSP PERMNO Link to COMPUSTAT Record"]
+
+    FCFF1 = FCFF1.T.groupby(level=0).first().T
+
+    # %% To have common dates values for Price and FCFF1 dataframes
+
+    df_Prices = pd.read_excel(paths['permno_gvkeys_linkage.xlsx'], sheet_name="Prices")
+    df_Prices.set_index('date', inplace=True)
+    date_index = df_Prices.index
+    date_index = [dt.datetime.strftime(d, "%Y/%m/%d") for d in date_index]
+    FCFF1 = FCFF1.reindex(index=date_index)
+
+    # %% To have common columns for Price and FCFF1 dataframes
+    x = pd.DataFrame(FCFF1.columns)
+    y = pd.DataFrame(df_Prices.columns)
+
+    y.columns = ['Historical CRSP PERMNO Link to COMPUSTAT Record']
+    z = x.append(y)
+    z1 = pd.DataFrame(z.duplicated(keep='last'))
+    z2 = []
+    i = 0
+    j = 0
+
+    for a in z1.values:
+        if a == True:
+            z2.append(z.iloc[j, 0])
+            i = i + 1
+        j = j + 1
+
+    # z2 has Premnos common between Prices and FCFF1 DataFrame
+    z2 = pd.DataFrame(z2)
+    z2.columns = ['Historical CRSP PERMNO Link to COMPUSTAT Record']
+
+    i = 0
+    FCFF2 = pd.DataFrame([], index=FCFF1.index, columns=[])
+    df_Prices1 = pd.DataFrame([], index=FCFF1.index, columns=[])
+
+    # Final FCFF is FCFF2 and Final Price df is df_Prices1
+    for c in z2.values:
+        FCFF2.loc[:, i] = FCFF1.loc[:, c]
+        FCFF2.columns.values[i] = c
+        df_Prices1.loc[:, i] = df_Prices.loc[:, c]
+        df_Prices1.columns.values[i] = c
+        i = i + 1
+
+    # %% Saving the FCFF data
+    # writing to excel
+
+    writer = pd.ExcelWriter(paths['FCFF.xlsx'] )
+    FCFF2.to_excel(writer, 'FCFF')
+    writer.save()
+
+    # writing to hd5 file
+    store = pd.HDFStore(paths['FCFF.h5'] )
+    store['FCFF'] = FCFF2
+    store.close()
+
+    # %% Saving the Price data
+
+    # writing to excel
+    writer = pd.ExcelWriter(paths['Prices.xlsx'])
+    df_Prices1.to_excel(writer, 'Prices')
+    writer.save()
+
+    # writing to hd5 file
+    store = pd.HDFStore(paths['Prices.h5'])
+    store['Prices'] = df_Prices1
+    store.close()
 
     # %% Saving Linkage file to excel and HD5
     writer = pd.ExcelWriter(paths['Linkage.xlsx'])
