@@ -171,13 +171,19 @@ def store_fundamentals():
     print('Pivoting accounting data')
     for col in df_AccountingData.columns[6:]:
         #   x= pd.pivot_table(df_AccountingData,index=["Data Date"],columns=["Global Company Key"],values=[col],fill_value=0)  # Take output file=fundamentals1.xlsx to compare
-        x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col])
-        x.columns = x.columns.droplevel()
-        fundamentals[col] = x
+
+        try:
+            x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col], fill_value=0)
+            x.columns = x.columns.droplevel()
+            fundamentals[col] = x
+        except:
+            pass
+
         i = i + 1
 
     date_index = pd.date_range(start='1989.09.30', end='2018.03.31', freq='D')
     date_index = [dt.datetime.strftime(d, "%Y/%m/%d") for d in date_index]
+
 
     s1 = pd.DataFrame(fundamentals["Capital Expenditures"])
     s1 = pd.DataFrame(s1.reindex(date_index, method='ffill'))
@@ -269,7 +275,10 @@ def store_fundamentals():
 
     # %% To have common dates values for Price and FCFF1 dataframes
 
-    df_Prices = pd.read_excel(paths['fn_Prices.xlsx'], sheet_name="Prices")
+    df_Prices = pd.read_excel(paths['fn_Prices_xlsx'], sheet_name="Prices")
+    #file = pd.ExcelFile(paths['fn_Prices_xlsx'])
+    #df_Prices = file.parse('Prices')
+    
     df_Prices.set_index('date', inplace=True)
     date_index = df_Prices.index
     date_index = [dt.datetime.strftime(d, "%Y/%m/%d") for d in date_index]
@@ -308,7 +317,7 @@ def store_fundamentals():
         df_Prices1.columns.values[i] = c
         i = i + 1
 
-    FCFF2 = FCFF2.aaplymap (lambda x: np.nan if x == 0 else x)
+    FCFF2 = FCFF2.applymap (lambda x: np.nan if x == 0 else x)
 
     # %% Saving the FCFF data
     # writing to excel
@@ -717,6 +726,10 @@ def max_dd(ser):
     mdd    = (zzmin/zzmax-1).min()
     return mdd
 
+def get_optionsdata_for_year(year):
+    store = 'something'
+
+
 # ToDo: implement filtering based on membership
 def evaluate_strategy(
         coverage=1,
@@ -795,20 +808,25 @@ def evaluate_strategy(
     reb_freq = 7
     k = 0
     for year in range(1996,2016):
+        pass
 
-
-
+    previous_year = 0
     for day in options.index:
+        if previous_year != day.year:
+            options_data_year = get_optionsdata_for_year(day.year)
+
+        opday = options_data_year.loc[options_data_year.date == day]
         for stock in options.loc[day].index:
-            opday = options.loc[day][stock]
-            if not np.isnan(target_strike.loc[day,stock]):
-                best_fit_index = opday.iloc[np.absolute((opday['strike'] - target_strike.loc[day,stock]).values).argsort()].index[0]
-                portfolio["strikes"].loc[day, stock]            = opday.loc[best_fit_index]['strike']
-                portfolio["daysToExpiry"].loc[day, stock]       = opday.loc[best_fit_index]['daysToExpiry']
-                portfolio["expiry"].loc[day, stock]             = day + dt.timedelta(days=opday.loc[best_fit_index]['daysToExpiry'])
-                portfolio["price"].loc[day, stock]              = opday.loc[best_fit_index]['price']
-                portfolio["delta"].loc[day, stock]              = opday.loc[best_fit_index]['delta']
-                portfolio["implied_volatility"].loc[day, stock] = opday.loc[best_fit_index]['implied_volatility']
+            opstock = opday.loc[opday.id == int(stock)]
+
+            if not len(opstock)!=0:
+                best_fit_index = opstock.iloc[np.absolute((opstock['strike'] - target_strike.loc[day,stock]).values).argsort()].index[0]
+                portfolio["strikes"].loc[day, stock]            = opstock.loc[best_fit_index]['strike']
+                portfolio["daysToExpiry"].loc[day, stock]       = opstock.loc[best_fit_index]['daysToExpiry']
+                portfolio["expiry"].loc[day, stock]             = day + dt.timedelta(days=opstock.loc[best_fit_index]['daysToExpiry'])
+                portfolio["price"].loc[day, stock]              = opstock.loc[best_fit_index]['price']
+                portfolio["delta"].loc[day, stock]              = opstock.loc[best_fit_index]['delta']
+                portfolio["implied_volatility"].loc[day, stock] = opstock.loc[best_fit_index]['implied_volatility']
 
 
     risk = portfolio["implied_volatility"] * portfolio["delta"]
