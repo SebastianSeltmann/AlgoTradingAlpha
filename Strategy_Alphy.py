@@ -171,9 +171,12 @@ def store_fundamentals():
     print('Pivoting accounting data')
     for col in df_AccountingData.columns[6:]:
         #   x= pd.pivot_table(df_AccountingData,index=["Data Date"],columns=["Global Company Key"],values=[col],fill_value=0)  # Take output file=fundamentals1.xlsx to compare
-        x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col], fill_value=0)
-        x.columns = x.columns.droplevel()
-        fundamentals[col] = x
+        try:
+            x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col], fill_value=0)
+            x.columns = x.columns.droplevel()
+            fundamentals[col] = x
+        except:
+            pass
         i = i + 1
 
     date_index = pd.date_range(start='1989.09.30', end='2018.03.31', freq='D')
