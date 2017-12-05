@@ -26,6 +26,7 @@ import gc
 F = open("rootpath.txt", "r")
 rootpath = F.read()
 F.close()
+# rootpath = "C:\\AlgoTradingData\\"
 paths = {}
 paths['quandl_key']                 = rootpath + "quandl_key.txt"
 paths['stockprices']                = rootpath + "stockprices.h5"
@@ -53,7 +54,7 @@ paths['all_options_h5']             = rootpath + "all_options.h5"
 paths['all_options2_h5']            = rootpath + "all_options2.h5"
 paths['all_options3_h5']            = rootpath + "all_options3.h5"
 paths['options_nested_df']          = rootpath + "options_nested_df.h5"
-paths['profiler']                   = rootpath + "profiler.txt"
+paths['profiler']                   = rootpath + "profile_data"
 
 paths['options_pickl_path'] = {}
 paths['options'] = []
@@ -698,7 +699,10 @@ def max_dd(ser):
     return mdd
 
 def get_optionsdata_for_year(year):
-    store = pd.HDFStore(paths['all_options_h5'])
+    #store = pd.HDFStore(paths['all_options_h5'])
+    store = pd.HDFStore("G:\\all_options.h5")
+
+
     optionsdata_for_year = store['options' + str(year)]
     store.close()
     return optionsdata_for_year
@@ -771,11 +775,56 @@ def evaluate_strategy(
 
     previous_year = 0
     '''
-
     test = pd.DataFrame(columns=['A'], data=[10,20,30])
     test.div(10, axis='A')
     '''
-    for day in stockprices.index[0:10]:
+
+    df = options_data_year
+
+    dt.datetime.now().date()
+
+
+    df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
+
+
+    df_fridays.strike_price
+    target_strike.loc[day,stock]
+
+    df['col_3'] = df[['col_1', 'col_2']].apply(lambda x: f(*x), axis=1)
+
+
+    df.date
+    same_format_target_strike =
+
+    def test(x,y):
+        print('hello')
+
+    df_fridays.id
+
+    df_fridays.index
+    df_fridays[['date','id']].apply(lambda x: target_strike.loc[x[0],x[1]])
+    selected_target_strikes = df_fridays[['date','id']].apply(lambda x: target_strike.loc[x[0].date(),x[1]], axis=1)
+    df_selected = pd.concat([df_fridays, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0:'target_strike'})
+    diffs = np.abs(df_selected.strike_price - df_selected.target_strike)
+
+
+    df_with_diff = pd.concat([df_selected, diffs], axis=1).rename(columns={0:'abs_difference'})
+
+    def get_min_diff(date,id):
+        #optimize this by running it only once for each date+id combination
+        return df_with_diff[(df_with_diff.date == date) & (df_with_diff.id == id)].abs_difference.min()
+
+    is_best_fit = df_with_diff[['date','id','abs_difference']].apply(lambda x: get_min_diff(x[0], x[1]) == x[2], axis=1)
+
+    df_best = df_with_diff[is_best_fit]
+
+
+    #strike_fit_index = opstock.iloc[np.absolute((opstock['strike_price'] - target_strike.loc[day, stock]).values).argsort()].index[0]
+
+
+
+    for day in stockprices.index[0:5]:
+
         print(day)
         if previous_year != day.year:
             previous_year = day.year
@@ -784,7 +833,11 @@ def evaluate_strategy(
             #options_data_year['date'] = list(x.date() for x in list(pd.to_datetime(options_data_year.date)))    #delete me
             #options_data_year = options_data_year[0:1246024]                                                    #delete me
         opday = options_data_year.loc[options_data_year.date == pd.to_datetime(day)]
-        stocklist = opday.id.unique()
+
+        # list(set(list1).intersection(list2))
+        # stocklist = opday.id.unique()
+        FCFF_filtered.loc[day].dropna(axis=0).index
+        stocklist = list(set(FCFF_filtered.loc[day].dropna(axis=0).index).intersection(opday.id.unique()))
         counter = 0
         for stock in stocklist:
             counter = counter + 1
