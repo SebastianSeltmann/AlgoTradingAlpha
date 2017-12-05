@@ -26,7 +26,6 @@ import gc
 F = open("rootpath.txt", "r")
 rootpath = F.read()
 F.close()
-rootpath = "C:\\AlgoTradingData\\"
 paths = {}
 paths['quandl_key']                 = rootpath + "quandl_key.txt"
 paths['stockprices']                = rootpath + "stockprices.h5"
@@ -445,6 +444,7 @@ def store_vix(prices):
 def store_options(CRSP_const, prices):
 
     ## Create constituents data frame
+    open(paths['all_options_h5'], 'w').close()   # delete HDF
     CRSP_const = CRSP_const[CRSP_const['ending'] > '1996-01-01']
 
     ids = CRSP_const
@@ -454,76 +454,30 @@ def store_options(CRSP_const, prices):
     prices = prices[dates_p >= pd.datetime.date(pd.datetime(1996, 1, 4))]
 
     ##
-    store = pd.HDFStore(paths['all_options3_h5'])
     st_y = pd.to_datetime(CRSP_const['start'])
     en_y = pd.to_datetime(CRSP_const['ending'])
 
-    for file in paths['options'][0:1]:
-        with open(file, 'r') as o:
-            print(file)
-            data = pd.read_csv(o)
-            year_index = file.find('rawopt_')
-            cur_y = file[year_index + 7:year_index + 7 + 4]
-            idx1 = st_y <= cur_y
-            idx2 = en_y >= cur_y
-            idx = idx1 & idx2
-            const = CRSP_const.loc[idx, :].reset_index(drop=True)
-            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'delta', 'impl_volatility', 'strike_price']],
-                             const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
-            listO['date'] = pd.to_datetime(listO['date'], format='%d%b%Y')
-            print(listO.shape)
-            store = pd.HDFStore(paths['all_options3_h5'])
-            store.append('options' + cur_y, listO, index=False, data_columns=True)
-            store.close()
-            '''
-            if counter == 0:
-                with open(paths['all_options_csv'], 'w') as f:
-                    listO.to_csv(f, header=True, index=False)
-            else:
-                with open(paths['all_options_csv'], 'a') as f:
-                    listO.to_csv(f, header=False, index=False)
-            counter = counter + 1
-            '''
-
-
-    df = pd.DataFrame(columns = ids, index = prices.index)
     for file in paths['options']:
         with open(file, 'r') as o:
             print(file)
-            data = pd.read_csv(o)
+            data  = pd.read_csv(o)
             year_index = file.find('rawopt_')
             cur_y = file[year_index + 7:year_index + 7 + 4]
-            idx1 = st_y <= cur_y
-            idx2 = en_y >= cur_y
-            idx = idx1 & idx2
+            idx1  = st_y <= cur_y
+            idx2  = en_y >= cur_y
+            idx   = idx1 & idx2
             const = CRSP_const.loc[idx, :].reset_index(drop=True)
             listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'strike_price']],
                              const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
+            listO['date']  = pd.to_datetime(listO['date'], format = '%d%b%Y')
+            idx3  = listO['delta'] > 0
+            listO = listO.loc[idx3, :]
+            listO['strike_price'] = listO['strike_price'] / 1000
             print(listO.shape)
+            store = pd.HDFStore(paths['all_options_h5'])
+            store.append('options' + cur_y, listO, index=False, data_columns=True)
+            store.close()
 
-            temp = listO['date']
-            listO['date'] = pd.to_datetime(temp, format = '%d%b%Y')
-
-            dates_index = listO['date'].drop_duplicates()
-            listO = listO.set_index('date')
-            listO = listO.set_index('id', append=True)
-            for date in dates_index:
-                for permno in const:
-                    index = listO.groupby(listO.index)
-                    df.loc[date, permno] = index.get_group((date, permno))
-
-            store.append('options/' + cur_y, df, index=False)
-
-            '''
-            if counter == 0:
-                with open(paths['all_options_csv'], 'w') as f:
-                    listO.to_csv(f, header=True, index=False)
-            else:
-                with open(paths['all_options_csv'], 'a') as f:
-                    listO.to_csv(f, header=False, index=False)
-            counter = counter + 1
-            '''
-    store.close()
 
     ##
 
@@ -581,14 +535,16 @@ def store_options_as_nested_df(CRSP_const, prices):
 
 command = 'load_data()'
 command = 'store_options_as_nested_df(CRSP_const, prices)'
+
 command = 'laufen()'
 def run_profiler(command):
     #prices, prices_raw, comp_const, CRSP_const, vix, FCFF = load_data()
-
+    print('Profiler Running')
     cProfile.run(command, filename=paths['profiler'])
     p = pstats.Stats(paths['profiler'])
     p.sort_stats('cumulative').print_stats(10)
     p.sort_stats('tottime').print_stats(10)
+
 
 
 def store_data():
@@ -636,8 +592,8 @@ def load_data():
     store.close()
     '''
     # Options data sourcing (test)
-    store = pd.HDFStore(paths['all_options3_h5'])
-    x = store['options2015']
+    store = pd.HDFStore(paths['all_options_h5'])
+    x = store['options1996']
     store.close()
     '''
 
