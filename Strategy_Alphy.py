@@ -50,10 +50,11 @@ paths['all_options3_h5']            = rootpath + "all_options3.h5"
 paths['options_nested_df']          = rootpath + "options_nested_df.h5"
 paths['profiler']                   = rootpath + "profiler.txt"
 
+paths['options_pickl_path'] = {}
 paths['options'] = []
-
-for y in range(1996, 2016):
+for y in range(1996, 2017):
     paths['options'].append(rootpath + "OptionsData\\rawopt_" + str(y) + "AllIndices.csv")
+    paths['options_pickl_path'][y] = rootpath + "OptionsData\\options_" + str(y) + ".pkl"
 
 
 ## -------------------------------------------------------------------
@@ -319,6 +320,10 @@ def store_fundamentals():
 
     FCFF2 = FCFF2.applymap (lambda x: np.nan if x == 0 else x)
 
+    FCFF2['pdDates'] = list(x.date() for x in list(pd.to_datetime(FCFF2.index)))
+    FCFF2['date'] = list(x.date() for x in list(pd.to_datetime(FCFF2.index)))
+    FCFF2 = FCFF2.set_index('date')
+
     # %% Saving the FCFF data
     # writing to excel
 
@@ -421,11 +426,12 @@ def store_vix(prices):
             except:
                 print('trying again ' + str(attempts-1) + '...')
                 attempts = attempts - 1
-    vix.loc[:,'pdDates'] = list(x.date() for x in list(pd.to_datetime(vix.index)))
+    vix['pdDates'] = list(x.date() for x in list(pd.to_datetime(vix.index)))
     fitted_vix = prices.merge(vix, how='left', right_on='pdDates', left_index=True)
-    fitted_vix.drop('pdDates',axis=1, inplace= True)
+    fitted_vix['date'] = list(x.date() for x in list(pd.to_datetime(fitted_vix.index)))
+    fitted_vix = fitted_vix.set_index('date')
     fitted_vix.drop(prices.columns, axis=1, inplace=True)
-
+    fitted_vix.drop('pdDates',axis=1, inplace= True)
     store = pd.HDFStore(paths['vix'])
     store['vix'] = fitted_vix
     store.close()
@@ -456,7 +462,7 @@ def store_options(CRSP_const, prices):
             idx2 = en_y >= cur_y
             idx = idx1 & idx2
             const = CRSP_const.loc[idx, :].reset_index(drop=True)
-            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'strike_price']],
+            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'delta', 'impl_volatility', 'strike_price']],
                              const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
             listO['date'] = pd.to_datetime(listO['date'], format='%d%b%Y')
             print(listO.shape)
@@ -620,11 +626,12 @@ def load_data():
     store = pd.HDFStore(paths['Linkage.h5'])
     linkage = store['Linkage']
     store.close()
-
+    '''
     # Options data sourcing (test)
     store = pd.HDFStore(paths['all_options3_h5'])
     x = store['options2015']
     store.close()
+    '''
 
     return prices, prices_raw, comp_const, CRSP_const, vix, FCFF
 
@@ -727,65 +734,59 @@ def max_dd(ser):
     return mdd
 
 def get_optionsdata_for_year(year):
-    store = 'something'
+    store = pd.HDFStore(paths['all_options3_h5'])
+    optionsdata_for_year = store['options' + str(year)]
+    store.close()
+    return optionsdata_for_year
 
+def get_nested_optionsdata_for_year(year):
+    return pd.read_pickle(paths['options_pickl_path'][year])
 
-# ToDo: implement filtering based on membership
+def single_run():
+    stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
+    year = 1996
+    relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
+    current_stockprices = stockprices.loc[relevant_days_index]
+    current_FCFF        = FCFF.loc[relevant_days_index]
+    current_VIX         = VIX.loc[relevant_days_index]
+    '''
+    backup_stockprices = stockprices
+    backup_FCFF = FCFF
+    backup_VIX = VIX
+    
+    coverage=1
+    quantile=0.5
+    strike_0=1.1
+    strike_1=0.0
+    day = dt.date(1996, 1, 4)
+    stock = 10078.0
+    stockprices = current_stockprices
+    FCFF = current_FCFF
+    VIX = current_VIX
+    '''
+    (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown) = evaluate_strategy(
+        stockprices = current_stockprices,
+        FCFF = current_FCFF,
+        VIX = current_VIX
+    )
+    print(portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
 def evaluate_strategy(
         coverage=1,
         quantile=0.5,
-        strike_0=1,
-        strike_1=0.01,
+        strike_0=1.1,
+        strike_1=0.0,
         stockprices=None,
-        options=None,
+        #options=None,
         FCFF=None,
         VIX=None,
-        membership=None,
         initial_cash = 10**6,
         rebalancing_frequency = 4,
-        ddwin = 30):
+        ddwin = 180):
 
     # define initial portfolio with cash only
     # loop through all assigned dates
-    # call timestep at each period
     # determine overall success after all time
     # return report of success
-    '''
-    pricy = stockprices.iloc[:5,:5]
-    stockprices = pricy
-    FCFF = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), len(pricy.columns))), index=pricy.index, columns=pricy.columns)
-    VIX = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), 1)), index=pricy.index, columns=['Adj Close'])
-    '''
-    '''
-    day = dt.datetime.strptime('1990-01-03', '%Y-%m-%d')
-    day2 = dt.datetime.strptime('1990-01-04', '%Y-%m-%d')
-
-    tuples = list(zip(*[[day,day,day,day,day,day2,day2,day2,day2,day2], [10,20,30,40,50,10,20,30,40,50]]))
-    index = pd.MultiIndex.from_tuples(tuples, names=['date', 'strike'])
-    options = pd.DataFrame(np.random.randint(0, 100, size=(len(pricy)*2, len(pricy.columns))), index=index,
-                           columns=pricy.columns)
-    options.xs(20, level='strike')
-    options.xs(day, level='date')
-    options.xs(day, level='date')[10057.0]
-    options.xs(day, level='date')[options.xs(day, level='date')[10057.0] > 7]
-    options.xs(day, level='date')[options.xs(day, level='date').index > 30]
-    options.xs(day, level='date').iloc[1,1]
-    options.xs(day, level='date').loc[20]
-    '''
-
-    options = pd.DataFrame(index=pricy.index, columns=pricy.columns)
-    def single_optionset():
-        return pd.DataFrame([
-            [20,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
-            [30,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
-            [40,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
-            [50,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
-            [60,2,np.random.randint(1,10),np.random.rand(), np.random.rand()*5],
-            ],
-            columns=['strike','daysToExpiry','price','delta','implied_volatility']
-        )
-    #options = options.applymap(lambda x: single_optionset())
-
 
     # keeping only the top q quantile
     FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(quantile,axis=1))]
@@ -803,33 +804,62 @@ def evaluate_strategy(
     portfolio["delta"]              = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
     portfolio["implied_volatility"] = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
 
-    day.date().year
-
-    reb_freq = 7
-    k = 0
-    for year in range(1996,2016):
-        pass
-
     previous_year = 0
-    for day in options.index:
-        if previous_year != day.year:
-            options_data_year = get_optionsdata_for_year(day.year)
+    options_version_nested = True
+    '''
+    if options_version_nested:
+        col_strike = 'strike_price'
+    else:
+        col_strike = 'strike'
+    '''
 
-        opday = options_data_year.loc[options_data_year.date == day]
-        for stock in options.loc[day].index:
-            opstock = opday.loc[opday.id == int(stock)]
+    for day in stockprices.index:
+        if options_version_nested:
+            if previous_year != day.year:
+                previous_year = day.year
+                options_data_year = get_nested_optionsdata_for_year(day.year)
+        else:
+            if previous_year != day.year:
+                previous_year = day.year
+                options_data_year = get_optionsdata_for_year(day.year)
+            opday = options_data_year.loc[options_data_year.date == day]
 
-            if not len(opstock)!=0:
-                best_fit_index = opstock.iloc[np.absolute((opstock['strike'] - target_strike.loc[day,stock]).values).argsort()].index[0]
-                portfolio["strikes"].loc[day, stock]            = opstock.loc[best_fit_index]['strike']
-                portfolio["daysToExpiry"].loc[day, stock]       = opstock.loc[best_fit_index]['daysToExpiry']
-                portfolio["expiry"].loc[day, stock]             = day + dt.timedelta(days=opstock.loc[best_fit_index]['daysToExpiry'])
-                portfolio["price"].loc[day, stock]              = opstock.loc[best_fit_index]['price']
+
+        # day = dt.date(1996, 1, 4)
+        # stock = 10078.0
+        for stock in stockprices.columns:
+            print(stock)
+            if options_version_nested:
+                opstock = options_data_year.loc[day,stock]
+            else:
+                opstock = opday.loc[opday.id == int(stock)]
+            if type(opstock) is pd.core.frame.DataFrame:
+                opstock = opstock[opstock.delta < 0]        # remove this once ready
+                continue_on = len(opstock) > 0
+            else:
+                if not pd.isnull(opstock):
+                    print("what")
+                    break
+                    opstock = opstock[opstock.delta < 0]    # remove this once ready
+                    continue_on = True
+                else:
+                    continue_on = False
+            if continue_on:
+                print("cont")
+                opstock.loc[:,'strike_price'] = opstock.loc[:,'strike_price'] / 1000
+
+                strike_fit_index = opstock.iloc[np.absolute((opstock['strike_price'] - target_strike.loc[day,stock]).values).argsort()].index[0]
+                shortlist = opstock.loc[opstock['strike_price'] == opstock.loc[strike_fit_index].strike_price]
+                best_fit_index = shortlist.iloc[np.absolute((shortlist['days'] - 30).values).argsort()].index[0]
+
+                portfolio["strikes"].loc[day, stock]            = opstock.loc[best_fit_index]['strike_price']
+                portfolio["daysToExpiry"].loc[day, stock]       = opstock.loc[best_fit_index]['days']
+                portfolio["expiry"].loc[day, stock]             = day + dt.timedelta(days=opstock.loc[best_fit_index]['days'])
+                portfolio["price"].loc[day, stock]              = opstock.loc[best_fit_index]['best_bid']
                 portfolio["delta"].loc[day, stock]              = opstock.loc[best_fit_index]['delta']
-                portfolio["implied_volatility"].loc[day, stock] = opstock.loc[best_fit_index]['implied_volatility']
+                portfolio["implied_volatility"].loc[day, stock] = opstock.loc[best_fit_index]['impl_volatility']
 
-
-    risk = portfolio["implied_volatility"] * portfolio["delta"]
+    risk = portfolio["implied_volatility"] * portfolio["delta"] * -1
 
     weights = (risk.T / risk.sum(axis=1)).T
     allocation = (weights / stockprices) / coverage
