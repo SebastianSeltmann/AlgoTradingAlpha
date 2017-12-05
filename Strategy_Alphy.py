@@ -778,9 +778,9 @@ def evaluate_strategy(
     test = pd.DataFrame(columns=['A'], data=[10,20,30])
     test.div(10, axis='A')
     '''
-    for day in stockprices.index[0:1]:
+    for day in stockprices.index[0:3]:
+        print(day)
         if previous_year != day.year:
-            print('starting with ' + str(day.year))
             previous_year = day.year
             options_data_year = get_optionsdata_for_year(day.year)
 
