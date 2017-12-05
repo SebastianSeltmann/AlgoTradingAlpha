@@ -14,13 +14,19 @@ import quandl
 import wrds
 import cProfile
 import pstats
+import gc
+
 
 
 ## ----------------------- SETTINGS ----------------------------------
+# gc.disable()
+# gc.enable()
+
 # # Constants
 F = open("rootpath.txt", "r")
 rootpath = F.read()
 F.close()
+rootpath = "C:\\AlgoTradingData\\"
 paths = {}
 paths['quandl_key']                 = rootpath + "quandl_key.txt"
 paths['stockprices']                = rootpath + "stockprices.h5"
@@ -452,7 +458,7 @@ def store_options(CRSP_const, prices):
     st_y = pd.to_datetime(CRSP_const['start'])
     en_y = pd.to_datetime(CRSP_const['ending'])
 
-    for file in paths['options']:
+    for file in paths['options'][0:1]:
         with open(file, 'r') as o:
             print(file)
             data = pd.read_csv(o)
@@ -575,12 +581,14 @@ def store_options_as_nested_df(CRSP_const, prices):
 
 command = 'load_data()'
 command = 'store_options_as_nested_df(CRSP_const, prices)'
+command = 'laufen()'
 def run_profiler(command):
     #prices, prices_raw, comp_const, CRSP_const, vix, FCFF = load_data()
 
     cProfile.run(command, filename=paths['profiler'])
     p = pstats.Stats(paths['profiler'])
     p.sort_stats('cumulative').print_stats(10)
+    p.sort_stats('tottime').print_stats(10)
 
 
 def store_data():
@@ -805,15 +813,14 @@ def evaluate_strategy(
     portfolio["implied_volatility"] = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
 
     previous_year = 0
-    options_version_nested = True
-    '''
-    if options_version_nested:
-        col_strike = 'strike_price'
-    else:
-        col_strike = 'strike'
+    options_version_nested = False
     '''
 
-    for day in stockprices.index:
+    test = pd.DataFrame(columns=['A'], data=[10,20,30])
+    test.div(10, axis='A')
+    '''
+
+    for day in stockprices.index[0:3]:
         if options_version_nested:
             if previous_year != day.year:
                 previous_year = day.year
@@ -822,19 +829,21 @@ def evaluate_strategy(
             if previous_year != day.year:
                 previous_year = day.year
                 options_data_year = get_optionsdata_for_year(day.year)
-            opday = options_data_year.loc[options_data_year.date == day]
+                # options_data_year['date'] = list(x.date() for x in list(pd.to_datetime(options_data_year.date)))
+                # options_data_year = options_data_year[0:1246024]
+            opday = options_data_year.loc[options_data_year.pdDates == day]
 
-
-        # day = dt.date(1996, 1, 4)
-        # stock = 10078.0
-        for stock in stockprices.columns:
-            print(stock)
+        stocklist = opday.id.unique()
+        counter = 0
+        for stock in stocklist:
+            counter = counter + 1
+            print(str(counter) + '/' + str(len(stocklist)))
             if options_version_nested:
                 opstock = options_data_year.loc[day,stock]
             else:
                 opstock = opday.loc[opday.id == int(stock)]
             if type(opstock) is pd.core.frame.DataFrame:
-                opstock = opstock[opstock.delta < 0]        # remove this once ready
+                #opstock = opstock[opstock.delta < 0]        # remove this once ready
                 continue_on = len(opstock) > 0
             else:
                 if not pd.isnull(opstock):
@@ -845,18 +854,20 @@ def evaluate_strategy(
                 else:
                     continue_on = False
             if continue_on:
-                print("cont")
-                opstock.loc[:,'strike_price'] = opstock.loc[:,'strike_price'] / 1000
+                #opstock['strike_price'] = opstock['strike_price'].div(1000)
 
                 strike_fit_index = opstock.iloc[np.absolute((opstock['strike_price'] - target_strike.loc[day,stock]).values).argsort()].index[0]
-                shortlist = opstock.loc[opstock['strike_price'] == opstock.loc[strike_fit_index].strike_price]
-                best_fit_index = shortlist.iloc[np.absolute((shortlist['days'] - 30).values).argsort()].index[0]
+                best_fit_index = strike_fit_index
+                #shortlist = opstock.loc[opstock['strike_price'] == opstock.loc[strike_fit_index].strike_price]
+                #best_fit_index = shortlist.iloc[np.absolute((shortlist['days'] - 30).values).argsort()].index[0]
+
+
 
                 portfolio["strikes"].loc[day, stock]            = opstock.loc[best_fit_index]['strike_price']
                 portfolio["daysToExpiry"].loc[day, stock]       = opstock.loc[best_fit_index]['days']
-                portfolio["expiry"].loc[day, stock]             = day + dt.timedelta(days=opstock.loc[best_fit_index]['days'])
+                portfolio["expiry"].loc[day, stock]             = day + dt.timedelta(days=int(opstock.loc[best_fit_index]['days']))
                 portfolio["price"].loc[day, stock]              = opstock.loc[best_fit_index]['best_bid']
-                portfolio["delta"].loc[day, stock]              = opstock.loc[best_fit_index]['delta']
+                portfolio["delta"].loc[day, stock]              = 0.5 # opstock.loc[best_fit_index]['delta']
                 portfolio["implied_volatility"].loc[day, stock] = opstock.loc[best_fit_index]['impl_volatility']
 
     risk = portfolio["implied_volatility"] * portfolio["delta"] * -1
