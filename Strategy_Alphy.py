@@ -735,8 +735,8 @@ def single_run():
         VIX = current_VIX
     )
     print(portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
-command="single_run()"
-run_profiler(command)
+#command="single_run()"
+#run_profiler(command)
 def evaluate_strategy(
         coverage=1,
         quantile=0.5,
