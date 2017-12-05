@@ -699,8 +699,8 @@ def max_dd(ser):
     return mdd
 
 def get_optionsdata_for_year(year):
-    #store = pd.HDFStore(paths['all_options_h5'])
-    store = pd.HDFStore("G:\\all_options.h5")
+    store = pd.HDFStore(paths['all_options_h5'])
+    #store = pd.HDFStore("G:\\all_options.h5")
 
 
     optionsdata_for_year = store['options' + str(year)]
@@ -719,12 +719,13 @@ def single_run():
     current_FCFF        = FCFF.loc[relevant_days_index]
     current_VIX         = VIX.loc[relevant_days_index]
     '''
+    
     backup_stockprices = stockprices
     backup_FCFF = FCFF
     backup_VIX = VIX
     
     coverage=1
-    quantile=0.5
+    quantile=0.1
     strike_0=0.9
     strike_1=0.0
     day = dt.date(1996, 1, 4)
@@ -740,7 +741,7 @@ command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_
 # run_profiler(command)
 def evaluate_strategy(
         coverage=1,
-        quantile=0.5,
+        quantile=0.1, # lower mean we include fewer stocks
         strike_0=0.9,
         strike_1=0.0,
         stockprices=None,
@@ -756,11 +757,105 @@ def evaluate_strategy(
     # determine overall success after all time
     # return report of success
 
+    #ToDo: figure out when to get options, I guess?
+    print('loading options data')
+    year = 1996
+    options_data_year = get_optionsdata_for_year(year)
+    df = options_data_year
+    #df = optionsdata_for_year
+    # len(df) == 622719
+
+
     print("determining target strikes")
     # keeping only the top q quantile
-    FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(quantile,axis=1))]
+    FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(1 - quantile,axis=1))]
     stockprices_filtered = stockprices + FCFF_filtered*0
     target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["Adj Close"], axis="index")
+
+
+    print("processing options_data")
+    #rebalancing-days are only on fridays
+    df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
+    # len(df_fridays) == 120272
+    '''
+    on fridays the remaining days will always be one of these values: 8, 15, 22, 29, 36, 43, 50, 57
+    this was true for all 1996 and 1997, so I assume it is true for all years
+    on any given friday, two of these maturities will be available for selling, and these two are 28 days apart
+    that makes filtering for just the ones we want to invest in straightforward
+    29,22,43,36
+    '''
+    df_nice_maturities = df_fridays[df_fridays['days'].isin([29,22,43,36])]
+    #len(df_nice_maturities) == 65736
+
+    selected_target_strikes = df_nice_maturities[['date','id']].apply(lambda x: target_strike.loc[x[0].date(),x[1]], axis=1)
+    df_selected = pd.concat([df_fridays, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0:'target_strike'})
+    # len(df_selected) == 31461
+
+    diffs = np.abs(df_selected.strike_price - df_selected.target_strike)
+    df_with_diff = pd.concat([df_selected, diffs], axis=1).rename(columns={0:'abs_difference'})
+
+    min_dict = {}
+
+    def get_min_diff(date,id):
+        #optimized this by running it only once for each date+id combination
+        if not (date,id) in min_dict:
+            min_diff = df_with_diff[(df_with_diff.date == date) & (df_with_diff.id == id)].abs_difference.min()
+            min_dict[(date,id)] = min_diff
+        else:
+            min_diff = min_dict[(date,id)]
+        return min_diff
+
+    is_best_fit = df_with_diff[['date','id','abs_difference']].apply(lambda x: get_min_diff(x[0], x[1]) == x[2], axis=1)
+
+    df_best = df_with_diff[is_best_fit]
+    # len(df_best) == 9907
+    df_risky = pd.concat([df_best, df_best.delta * df_best.impl_volatility], axis=1).rename(columns={0:'risk'})
+
+    risk_dict = {}
+    def get_total_risk_for_date(date):
+        if not (date) in risk_dict:
+            total_risk = df_risky[df_best.date == date].risk.sum()
+            risk_dict[date] = total_risk
+        else:
+            total_risk = risk_dict[date]
+        return total_risk
+
+    allocation = df_risky[['risk','date','id']].apply(lambda x: x[0] / get_total_risk_for_date(x[1]) / stockprices.loc[x[1].date(),x[2]] / coverage, axis=1)
+    df_allocated = pd.concat([df_risky, allocation], axis=1).rename(columns={0:'allocation'})
+
+    portfolio_metrics = pd.DataFrame(index=df_allocated.date.unique(),columns=['portfolio_value', 'cash', 'payments', 'earnings', ])
+    portfolio_metrics.fillna({'payments':0,'earnings':0}, inplace=True)
+    portfolio_metrics.iloc[0,1] = initial_cash
+
+    previous_day = df_allocated.date.unique()[0]
+    for sale in df_allocated:
+        if previous_day != sale.date:
+            portfolio_value, cash = portfolio_metrics.loc[previous_day][['portfolio_value', 'cash']]
+            payments = 0
+            earnings = 0
+        else:
+            portfolio_value, cash, payments, earnings = portfolio_metrics.loc[sale.date][['portfolio_value', 'cash', 'payments', 'earnings']]
+        day_date = sale.date.date()
+        amount = np.floor(cash*sale.allocation / 4) # 25% at each week
+        cash = cash + amount * sale.best_bid
+        '''
+        #ToDo
+        Pseudocode - anyone can work here:
+        expiry = sale.date + sale.days
+        portfolio_metrics[last one before expiry][payments] += max(0, stockprice[at that time] - sale.strike_price
+        
+        cash needs to grow and shrink with each cashflow
+        portfolio_value probably needs to grow and shrink only at expiry? should decide on an approach
+        
+        '''
+        portfolio_metrics.loc[sale.date][['cash', 'payments', 'earnings']] = (portfolio_value, cash, payments, earnings)
+    '''
+    #ToDo
+    Here we must calculate the portfolio reports
+    '''
+    (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown) = (1,2,3)
+    return (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
+'''
 
     portfolio = {}
     portfolio['metrics']            = pd.DataFrame(index=stockprices.index, columns=['portfolio_value', 'payments', 'earnings', 'returns'])
@@ -774,55 +869,6 @@ def evaluate_strategy(
     portfolio["implied_volatility"] = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
 
     previous_year = 0
-    '''
-    test = pd.DataFrame(columns=['A'], data=[10,20,30])
-    test.div(10, axis='A')
-    '''
-
-    df = options_data_year
-
-    dt.datetime.now().date()
-
-
-    df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
-
-
-    df_fridays.strike_price
-    target_strike.loc[day,stock]
-
-    df['col_3'] = df[['col_1', 'col_2']].apply(lambda x: f(*x), axis=1)
-
-
-    df.date
-    same_format_target_strike =
-
-    def test(x,y):
-        print('hello')
-
-    df_fridays.id
-
-    df_fridays.index
-    df_fridays[['date','id']].apply(lambda x: target_strike.loc[x[0],x[1]])
-    selected_target_strikes = df_fridays[['date','id']].apply(lambda x: target_strike.loc[x[0].date(),x[1]], axis=1)
-    df_selected = pd.concat([df_fridays, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0:'target_strike'})
-    diffs = np.abs(df_selected.strike_price - df_selected.target_strike)
-
-
-    df_with_diff = pd.concat([df_selected, diffs], axis=1).rename(columns={0:'abs_difference'})
-
-    def get_min_diff(date,id):
-        #optimize this by running it only once for each date+id combination
-        return df_with_diff[(df_with_diff.date == date) & (df_with_diff.id == id)].abs_difference.min()
-
-    is_best_fit = df_with_diff[['date','id','abs_difference']].apply(lambda x: get_min_diff(x[0], x[1]) == x[2], axis=1)
-
-    df_best = df_with_diff[is_best_fit]
-
-
-    #strike_fit_index = opstock.iloc[np.absolute((opstock['strike_price'] - target_strike.loc[day, stock]).values).argsort()].index[0]
-
-
-
     for day in stockprices.index[0:5]:
 
         print(day)
@@ -899,6 +945,7 @@ def evaluate_strategy(
     portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
 
     return (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
+'''
 
 '''
 stockprices, prices_raw, comp_const, CRSP_const, VIX = load_data()
