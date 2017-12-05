@@ -729,14 +729,11 @@ def single_run():
     FCFF = current_FCFF
     VIX = current_VIX
     '''
-    (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown) = evaluate_strategy(
-        stockprices = current_stockprices,
-        FCFF = current_FCFF,
-        VIX = current_VIX
-    )
-    print(portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
-#command="single_run()"
-#run_profiler(command)
+    evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )
+    # print(portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
+command="single_run()"
+command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )"
+# run_profiler(command)
 def evaluate_strategy(
         coverage=1,
         quantile=0.5,
@@ -778,7 +775,7 @@ def evaluate_strategy(
     test = pd.DataFrame(columns=['A'], data=[10,20,30])
     test.div(10, axis='A')
     '''
-    for day in stockprices.index[0:3]:
+    for day in stockprices.index[0:10]:
         print(day)
         if previous_year != day.year:
             previous_year = day.year
