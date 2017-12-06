@@ -710,17 +710,24 @@ def get_optionsdata_for_year(year):
 def get_nested_optionsdata_for_year(year):
     return pd.read_pickle(paths['options_pickl_path'][year])
 
-def single_run():
+def single_run(year=1998):
     print("loading general data")
     stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
-    year = 1996
     relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
     current_stockprices = stockprices.loc[relevant_days_index]
     current_FCFF        = FCFF.loc[relevant_days_index]
     current_VIX         = VIX.loc[relevant_days_index]
 
-    evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )
-    # print(portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
+    (portfolio_sharperatio, portfolio_returns, portfolio_volatility) = evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, year = year )
+    print(portfolio_sharperatio, portfolio_returns, portfolio_volatility)
+    return(portfolio_sharperatio, portfolio_returns, portfolio_volatility)
+
+'''
+results = {}
+for year in range(1996, 2017):
+    results[year] = single_run(year)
+
+'''
 command="single_run()"
 command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )"
 # run_profiler(command)
@@ -734,6 +741,7 @@ def evaluate_strategy(
         FCFF=None,
         VIX=None,
         initial_cash = 10**6,
+        year=1996,
         rebalancing_frequency = 4,
         ddwin = 180):
 
@@ -742,7 +750,6 @@ def evaluate_strategy(
     # determine overall success after all time
     # return report of success
 
-    print('loading options data')
     '''
     # Run these statements to prepare everything needed from outside this function
     print("loading general data")
@@ -765,14 +772,12 @@ def evaluate_strategy(
     '''
 
     #ToDo: figure out when to get options, I guess?
-    year = 1996
     options_data_year = get_optionsdata_for_year(year)
     df = options_data_year
     #df = optionsdata_for_year
     # len(df) == 622719
 
 
-    print("determining target strikes")
     # keeping only the top q quantile
     FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(1 - quantile,axis=1))]
     stockprices_filtered = stockprices + FCFF_filtered*0
@@ -815,6 +820,7 @@ def evaluate_strategy(
 
     df_best = df_with_diff[is_best_fit]
     # len(df_best) == 9907
+
     df_risky = pd.concat([df_best, df_best.delta * df_best.impl_volatility], axis=1).rename(columns={0:'risk'})
 
     risk_dict = {}
@@ -828,39 +834,65 @@ def evaluate_strategy(
 
     allocation = df_risky[['risk','date','id']].apply(lambda x: x[0] / get_total_risk_for_date(x[1]) / stockprices.loc[x[1].date(),x[2]] / coverage, axis=1)
     df_allocated = pd.concat([df_risky, allocation], axis=1).rename(columns={0:'allocation'})
-
-    portfolio_metrics = pd.DataFrame(index=df_allocated.date.unique(),columns=['portfolio_value', 'cash', 'payments', 'earnings', ])
+    df_sorted = df_allocated.sort_values(by=['date'])
+    
+    portfolio_metrics = pd.DataFrame(index=df_sorted.date.unique(),columns=['portfolio_value', 'cash', 'payments', 'earnings', ])
     portfolio_metrics.fillna({'payments':0,'earnings':0}, inplace=True)
+    # sale = df_sorted.iloc[0]
     portfolio_metrics.iloc[0,1] = initial_cash
+    previous_day = df_sorted.iloc[0,1] # first day
+    weekly_risk_free_rate = 1.0
+    print('Iterating through evaluation')
+    #sale = df_sorted.iloc[200]
+    tmp = np.nan
+    # sale = df_sorted.loc[429770]
+    try:
+        for index, sale in df_sorted.iterrows():
+            tmp = sale
+            if previous_day != sale.date:
+                portfolio_value, cash, payments, earnings = portfolio_metrics.loc[previous_day][['portfolio_value', 'cash', 'payments', 'earnings']]
+                portfolio_metrics.loc[sale.date, 'cash'] = cash * weekly_risk_free_rate - payments + earnings
+                previous_day = sale.date
 
-    previous_day = df_allocated.date.unique()[0]
-    for sale in df_allocated: #ToDo: this loop
-        if previous_day != sale.date:
-            portfolio_value, cash = portfolio_metrics.loc[previous_day][['portfolio_value', 'cash']]
-            payments = 0
-            earnings = 0
-        else:
-            portfolio_value, cash, payments, earnings = portfolio_metrics.loc[sale.date][['portfolio_value', 'cash', 'payments', 'earnings']]
-        day_date = sale.date.date()
-        amount = np.floor(cash*sale.allocation / 4) # 25% at each week
-        cash = cash + amount * sale.best_bid
-        '''
-        #ToDo
-        Pseudocode - anyone can work here:
-        expiry = sale.date + sale.days
-        portfolio_metrics[last one before expiry][payments] += max(0, stockprice[at that time] - sale.strike_price
-        
-        cash needs to grow and shrink with each cashflow
-        portfolio_value probably needs to grow and shrink only at expiry? should decide on an approach
-        
-        '''
-        portfolio_metrics.loc[sale.date][['cash', 'payments', 'earnings']] = (portfolio_value, cash, payments, earnings)
-    '''
-    #ToDo
-    Here we must calculate the portfolio reports
-    '''
-    (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown) = (1,2,3)
-    return (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
+            else:
+                portfolio_value, cash, payments, earnings = portfolio_metrics.loc[sale.date][['portfolio_value', 'cash', 'payments', 'earnings']]
+
+            amount = np.floor(cash*sale.allocation / 4) # 25% at each week
+
+            try:
+                expiry = sale.date + dt.timedelta(days=int(sale.days)) + dt.timedelta(days=6) # adding 6 days so that it ends up on a rebalancing friday
+                if not expiry > df_sorted.date.max():
+                    portfolio_metrics.loc[expiry, 'payments']       += amount* max(0, sale.strike_price - stockprices.loc[expiry.date(), sale.id])
+                portfolio_metrics.loc[sale.date, 'earnings']    += amount* sale.best_bid
+            except:
+                # 1997-03-28 was was a good friday holiday:
+                # http://www.cboe.com/aboutcboe/cboe-cbsx-amp-cfe-press-releases?DIR=ACNews&FILE=na321.doc&CreateDate=21.03.1997&Title=CBOE%20announces%20Good%20Friday%20trading%20schedule
+                # we do not have a stockprice for that day, so we pick the closest previous stockprice
+                # the losses will be booked onto the following rebalancing day
+                closest_expiry = expiry
+                next_rebalancing_day = expiry + dt.timedelta(days=7)
+                for i in range(10):
+                    closest_expiry -= dt.timedelta(days=1)
+                    if (stockprices.index == closest_expiry.date()).any():
+                        if not expiry > df_sorted.date.max():
+                            portfolio_metrics.loc[next_rebalancing_day, 'payments'] += amount * max(0, sale.strike_price - stockprices.loc[ closest_expiry.date(), sale.id])
+                        portfolio_metrics.loc[sale.date, 'earnings'] += amount* sale.best_bid
+                        break
+
+        # not sure which annualization method to use
+        returns = portfolio_metrics.cash.pct_change()
+        #annual_return = (1+returns.mean())**len(portfolio_metrics)
+        annual_return = returns.mean()*len(portfolio_metrics)
+        annual_vola = returns.std()*np.sqrt(len(portfolio_metrics))
+        sharperatio = annual_return / annual_vola
+    except:
+        print("Iterating through evaluation crashed on this sale:")
+        print(tmp)
+        sharperatio, annual_return, annual_vola =(0,0,0)
+
+    #portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
+
+    return (sharperatio, annual_return, annual_vola)
 '''
 
     portfolio = {}
