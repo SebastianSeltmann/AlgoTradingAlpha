@@ -718,22 +718,7 @@ def single_run():
     current_stockprices = stockprices.loc[relevant_days_index]
     current_FCFF        = FCFF.loc[relevant_days_index]
     current_VIX         = VIX.loc[relevant_days_index]
-    '''
-    
-    backup_stockprices = stockprices
-    backup_FCFF = FCFF
-    backup_VIX = VIX
-    
-    coverage=1
-    quantile=0.1
-    strike_0=0.9
-    strike_1=0.0
-    day = dt.date(1996, 1, 4)
-    stock = 10078.0
-    stockprices = current_stockprices
-    FCFF = current_FCFF
-    VIX = current_VIX
-    '''
+
     evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )
     # print(portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
 command="single_run()"
@@ -757,8 +742,29 @@ def evaluate_strategy(
     # determine overall success after all time
     # return report of success
 
-    #ToDo: figure out when to get options, I guess?
     print('loading options data')
+    '''
+    # Run these statements to prepare everything needed from outside this function
+    print("loading general data")
+    stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
+    year = 1996
+    relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
+    current_stockprices = stockprices.loc[relevant_days_index]
+    current_FCFF        = FCFF.loc[relevant_days_index]
+    current_VIX         = VIX.loc[relevant_days_index]
+    coverage=1
+    initial_cash = 10**6
+    quantile=0.1
+    strike_0=0.9
+    strike_1=0.0
+    day = dt.date(1996, 1, 4)
+    stock = 10078.0
+    stockprices = current_stockprices
+    FCFF = current_FCFF
+    VIX = current_VIX
+    '''
+
+    #ToDo: figure out when to get options, I guess?
     year = 1996
     options_data_year = get_optionsdata_for_year(year)
     df = options_data_year
@@ -828,7 +834,7 @@ def evaluate_strategy(
     portfolio_metrics.iloc[0,1] = initial_cash
 
     previous_day = df_allocated.date.unique()[0]
-    for sale in df_allocated:
+    for sale in df_allocated: #ToDo: this loop
         if previous_day != sale.date:
             portfolio_value, cash = portfolio_metrics.loc[previous_day][['portfolio_value', 'cash']]
             payments = 0
