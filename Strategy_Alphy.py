@@ -433,7 +433,7 @@ def store_vix(prices):
                 print('trying again ' + str(attempts-1) + '...')
                 attempts = attempts - 1
     vix['pdDates'] = list(x.date() for x in list(pd.to_datetime(vix.index)))
-    vix.drop_duplicates()
+    vix.drop_duplicates(inplace=True)
     fitted_vix = prices.merge(vix, how='left', right_on='pdDates', left_index=True)
     fitted_vix['date'] = list(x.date() for x in list(pd.to_datetime(fitted_vix.index)))
     fitted_vix = fitted_vix.set_index('date')
@@ -442,6 +442,8 @@ def store_vix(prices):
     store = pd.HDFStore(paths['vix'])
     store['vix'] = fitted_vix
     store.close()
+
+
 
 def store_options(CRSP_const, prices):
 
@@ -677,18 +679,6 @@ def optimize(
     ) = minimization.x
     return (optimized_coverage, optimized_quantile, optimized_strike_0, optimized_strike_1)
 
-'''
-# Execute these lines to test the functions:
-
-stockprices, prices_raw, comp_const, CRSP_const, VIX = load_data()
-pricy = stockprices.iloc[:5,:5]
-stockprices = pricy
-FCFF = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), len(pricy.columns))), index=pricy.index, columns=pricy.columns)
-VIX = pd.DataFrame(np.random.randint(0,100,size=(len(pricy), 1)), index=pricy.index, columns=['Adj Close'])
-
-optimize(stockprices,options,FCFF,VIX,np.nan)
-objective(0.9,0.9,0,1,stockprices,options,FCFF,VIX,np.nan)
-'''
 
 # # Strategy Evaluation
 
@@ -703,7 +693,7 @@ def get_optionsdata_for_year(year):
     store = pd.HDFStore(paths['all_options_h5'])
     #store = pd.HDFStore("G:\\all_options.h5")
 
-
+    store.keys()
     optionsdata_for_year = store['options' + str(year)]
     store.close()
     return optionsdata_for_year
@@ -711,8 +701,8 @@ def get_optionsdata_for_year(year):
 def get_nested_optionsdata_for_year(year):
     return pd.read_pickle(paths['options_pickl_path'][year])
 
-def single_run(year=1998):
-    print("loading general data")
+def single_run(year=2015):
+    print("loading general data for " + str(year))
     stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
     relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
     current_stockprices = stockprices.loc[relevant_days_index]
@@ -727,7 +717,7 @@ def single_run(year=1998):
 results = {}
 for year in range(1996, 2017):
     results[year] = single_run(year)
-
+death in 2015
 '''
 command="single_run()"
 command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )"
@@ -755,7 +745,7 @@ def evaluate_strategy(
     # Run these statements to prepare everything needed from outside this function
     print("loading general data")
     stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
-    year = 1996
+    year = 2015
     relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
     current_stockprices = stockprices.loc[relevant_days_index]
     current_FCFF        = FCFF.loc[relevant_days_index]
@@ -765,14 +755,13 @@ def evaluate_strategy(
     quantile=0.1
     strike_0=0.9
     strike_1=0.0
-    day = dt.date(1996, 1, 4)
-    stock = 10078.0
+    day = dt.date(2005, 2, 4)
+    stock = 11850.0
     stockprices = current_stockprices
     FCFF = current_FCFF
     VIX = current_VIX
     '''
 
-    #ToDo: figure out when to get options, I guess?
     options_data_year = get_optionsdata_for_year(year)
     df = options_data_year
     #df = optionsdata_for_year
@@ -784,11 +773,13 @@ def evaluate_strategy(
     stockprices_filtered = stockprices + FCFF_filtered*0
     target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["Adj Close"], axis="index")
 
-
     print("processing options_data")
     #rebalancing-days are only on fridays
     df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
     # len(df_fridays) == 120272
+
+
+
     '''
     on fridays the remaining days will always be one of these values: 8, 15, 22, 29, 36, 43, 50, 57
     this was true for all 1996 and 1997, so I assume it is true for all years
@@ -797,6 +788,14 @@ def evaluate_strategy(
     29,22,43,36
     '''
     df_nice_maturities = df_fridays[df_fridays['days'].isin([29,22,43,36])]
+    if len(df_nice_maturities) == 0:
+        print("fixing")
+        to_be_replaced = [6, 7, 8, 13, 14, 15, 20, 21, 27, 28, 34, 35, 41, 42, 48, 49, 56]
+        replacements   = [8, 8, 8, 15, 15, 15, 22, 22, 29, 29, 36, 36, 43, 43, 50, 50, 57]
+        df_fridays['days'].replace(to_be_replaced,replacements, inplace=True)
+        df_nice_maturities = df_fridays[df_fridays['days'].isin([29,22,43,36])]
+        print("fixed")
+
     #len(df_nice_maturities) == 65736
 
     selected_target_strikes = df_nice_maturities[['date','id']].apply(lambda x: target_strike.loc[x[0].date(),x[1]], axis=1)
@@ -860,7 +859,7 @@ def evaluate_strategy(
 
             amount = np.floor(cash*sale.allocation / 4) # 25% at each week
 
-            try:
+            try: #trying and catching if it fails is faster than checking beforehand, because fails are rate
                 expiry = sale.date + dt.timedelta(days=int(sale.days)) + dt.timedelta(days=6) # adding 6 days so that it ends up on a rebalancing friday
                 if not expiry > df_sorted.date.max():
                     portfolio_metrics.loc[expiry, 'payments']       += amount* max(0, sale.strike_price - stockprices.loc[expiry.date(), sale.id])
@@ -871,12 +870,14 @@ def evaluate_strategy(
                 # we do not have a stockprice for that day, so we pick the closest previous stockprice
                 # the losses will be booked onto the following rebalancing day
                 closest_expiry = expiry
-                next_rebalancing_day = expiry + dt.timedelta(days=7)
+                #next_rebalancing_day = expiry + dt.timedelta(days=7)
+                next_rebalancing_index = portfolio_metrics.index.get_loc(sale.date) + 1
+                payments_column_index = 2
                 for i in range(10):
                     closest_expiry -= dt.timedelta(days=1)
                     if (stockprices.index == closest_expiry.date()).any():
                         if not expiry > df_sorted.date.max():
-                            portfolio_metrics.loc[next_rebalancing_day, 'payments'] += amount * max(0, sale.strike_price - stockprices.loc[ closest_expiry.date(), sale.id])
+                            portfolio_metrics.iloc[next_rebalancing_index, payments_column_index] += amount * max(0, sale.strike_price - stockprices.loc[ closest_expiry.date(), sale.id])
                         portfolio_metrics.loc[sale.date, 'earnings'] += amount* sale.best_bid
                         break
 
