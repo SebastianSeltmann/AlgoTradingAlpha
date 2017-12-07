@@ -471,10 +471,10 @@ def store_options(CRSP_const, prices):
             idx2  = en_y >= cur_y
             idx   = idx1 & idx2
             const = CRSP_const.loc[idx, :].reset_index(drop=True)
-            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'strike_price']],
+            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'delta', 'strike_price']],
                              const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
             listO['date']  = pd.to_datetime(listO['date'], format = '%d%b%Y')
-            idx3  = listO['delta'] > 0
+            idx3  = listO['delta'] < 0
             listO = listO.loc[idx3, :]
             listO['strike_price'] = listO['strike_price'] / 1000
             print(listO.shape)
@@ -863,6 +863,18 @@ def evaluate_strategy(
     #sale = df_final.iloc[200]
     tmp = np.nan
     # sale = df_final.loc[429770]
+    amount_counter = {}
+    max_amount = 0
+    max_amount_sale = np.nan
+    def inc_amount_counter(amount, sale, max_amount, max_amount_sale):
+        if amount in amount_counter:
+            amount_counter[amount] += 1
+        else:
+            if amount > max_amount:
+                max_amount = amount
+                max_amount_sale = sale
+            amount_counter[amount] = 1
+        return max_amount, max_amount_sale
     try:
         for index, sale in df_final.iterrows():
             tmp = sale
@@ -875,6 +887,7 @@ def evaluate_strategy(
                 portfolio_value, cash, payments, earnings = portfolio_metrics.loc[sale.date][['portfolio_value', 'cash', 'payments', 'earnings']]
 
             amount = np.floor(cash*sale.allocation / 4 / multiplier ) # 25% at each week
+            max_amount, max_amount_sale = inc_amount_counter(amount, sale, max_amount, max_amount_sale)
             portfolio_metrics.loc[sale.date, 'fees']  += min(1, multiplier * sale.commission)
 
             try: #trying and catching if it fails is faster than checking beforehand, because fails are rate
