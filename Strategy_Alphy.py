@@ -15,6 +15,7 @@ import wrds
 import cProfile
 import pstats
 import gc
+import pickle
 
 
 
@@ -55,6 +56,7 @@ paths['all_options2_h5']            = rootpath + "all_options2.h5"
 paths['all_options3_h5']            = rootpath + "all_options3.h5"
 paths['options_nested_df']          = rootpath + "options_nested_df.h5"
 paths['profiler']                   = rootpath + "profile_data"
+paths['results']                    = rootpath + "results.pkl"
 
 paths['options_pickl_path'] = {}
 paths['options'] = []
@@ -691,9 +693,6 @@ def max_dd(ser):
 
 def get_optionsdata_for_year(year):
     store = pd.HDFStore(paths['all_options_h5'])
-    #store = pd.HDFStore("G:\\all_options.h5")
-
-    store.keys()
     optionsdata_for_year = store['options' + str(year)]
     store.close()
     return optionsdata_for_year
@@ -709,18 +708,30 @@ def single_run(year=2014):
     current_FCFF        = FCFF.loc[relevant_days_index]
     current_VIX         = VIX.loc[relevant_days_index]
 
-    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics) = evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, year = year )
+    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, year = year )
     print(portfolio_sharperatio, portfolio_returns, portfolio_volatility)
-    return(portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics)
+    return(portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales)
 
-'''
-(portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics) = single_run(year=2014)
+def run_and_store_results():
+    '''
+    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = single_run(year=2009)
+    portfolio_metrics.cash.plot()
+    '''
+    results = {}
+    for year in range(1996, 2016):
+        results[year] = single_run(year)
 
-results = {}
-for year in range(1996, 2017):
-    results[year] = single_run(year)[0:3]
-death in 2015
-'''
+    with open(paths['results'], 'wb') as handle:
+        pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    with open(paths['results'], 'rb') as handle:
+        loaded_results = pickle.load(handle)
+
+    for year, tuple in results.items():
+        SR, ret, vol, metrics, sales = tuple
+        print('%4d: %2.2f %2.2f %2.2f' % (year, SR, ret, vol))
+
+
 command="single_run()"
 command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )"
 # run_profiler(command)
@@ -924,7 +935,7 @@ def evaluate_strategy(
 
     #portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
 
-    return (sharperatio, annual_return, annual_vola, portfolio_metrics)
+    return (sharperatio, annual_return, annual_vola, portfolio_metrics, df_final)
 
 
 # # Main: Data Loading & Approach Evaluation
