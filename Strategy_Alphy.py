@@ -433,6 +433,7 @@ def store_vix(prices):
                 print('trying again ' + str(attempts-1) + '...')
                 attempts = attempts - 1
     vix['pdDates'] = list(x.date() for x in list(pd.to_datetime(vix.index)))
+    vix.drop_duplicates()
     fitted_vix = prices.merge(vix, how='left', right_on='pdDates', left_index=True)
     fitted_vix['date'] = list(x.date() for x in list(pd.to_datetime(fitted_vix.index)))
     fitted_vix = fitted_vix.set_index('date')
