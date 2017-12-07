@@ -701,7 +701,7 @@ def get_optionsdata_for_year(year):
 def get_nested_optionsdata_for_year(year):
     return pd.read_pickle(paths['options_pickl_path'][year])
 
-def single_run(year=2015):
+def single_run(year=2014):
     print("loading general data for " + str(year))
     stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
     relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
@@ -709,14 +709,16 @@ def single_run(year=2015):
     current_FCFF        = FCFF.loc[relevant_days_index]
     current_VIX         = VIX.loc[relevant_days_index]
 
-    (portfolio_sharperatio, portfolio_returns, portfolio_volatility) = evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, year = year )
+    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics) = evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, year = year )
     print(portfolio_sharperatio, portfolio_returns, portfolio_volatility)
-    return(portfolio_sharperatio, portfolio_returns, portfolio_volatility)
+    return(portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics)
 
 '''
+(portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics) = single_run(year=2014)
+
 results = {}
 for year in range(1996, 2017):
-    results[year] = single_run(year)
+    results[year] = single_run(year)[0:3]
 death in 2015
 '''
 command="single_run()"
@@ -734,7 +736,8 @@ def evaluate_strategy(
         initial_cash = 10**6,
         year=1996,
         rebalancing_frequency = 4,
-        ddwin = 180):
+        ddwin = 180,
+        multiplier = 100,):
 
     # define initial portfolio with cash only
     # loop through all assigned dates
@@ -745,7 +748,7 @@ def evaluate_strategy(
     # Run these statements to prepare everything needed from outside this function
     print("loading general data")
     stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
-    year = 2015
+    year = 2014
     relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
     current_stockprices = stockprices.loc[relevant_days_index]
     current_FCFF        = FCFF.loc[relevant_days_index]
@@ -755,6 +758,7 @@ def evaluate_strategy(
     quantile=0.1
     strike_0=0.9
     strike_1=0.0
+    multiplier = 100
     day = dt.date(2005, 2, 4)
     stock = 11850.0
     stockprices = current_stockprices
@@ -835,35 +839,49 @@ def evaluate_strategy(
     allocation = df_risky[['risk','date','id']].apply(lambda x: x[0] / get_total_risk_for_date(x[1]) / stockprices.loc[x[1].date(),x[2]] / coverage, axis=1)
     df_allocated = pd.concat([df_risky, allocation], axis=1).rename(columns={0:'allocation'})
     df_sorted = df_allocated.sort_values(by=['date'])
-    
-    portfolio_metrics = pd.DataFrame(index=df_sorted.date.unique(),columns=['portfolio_value', 'cash', 'payments', 'earnings', ])
-    portfolio_metrics.fillna({'payments':0,'earnings':0}, inplace=True)
-    # sale = df_sorted.iloc[0]
+    # Transaction fees based on Interactive Brokers
+    # https://www.interactivebrokers.com/en/index.php?f=commission&p=options1
+    def choose_commission(premium):
+        if premium >= 0.1:
+            return 0.7
+        elif premium >= 0.05:
+            return 0.5
+        else:
+            return 0.25
+    commissions = df_sorted['best_bid'].apply(lambda x: choose_commission(x)).rename('commission')
+    df_final = pd.concat([df_sorted, commissions], axis=1)
+
+    portfolio_metrics = pd.DataFrame(index=df_final.date.unique(),columns=['portfolio_value', 'cash', 'earnings', 'payments', 'fees' ])
+    payments_column_index = portfolio_metrics.columns.get_loc('payments')
+
+    portfolio_metrics.fillna({'payments':0,'earnings':0,'fees':0}, inplace=True)
+    # sale = df_final.iloc[0]
     portfolio_metrics.iloc[0,1] = initial_cash
-    previous_day = df_sorted.iloc[0,1] # first day
+    previous_day = df_final.iloc[0,1] # first day
     weekly_risk_free_rate = 1.0
     print('Iterating through evaluation')
-    #sale = df_sorted.iloc[200]
+    #sale = df_final.iloc[200]
     tmp = np.nan
-    # sale = df_sorted.loc[429770]
+    # sale = df_final.loc[429770]
     try:
-        for index, sale in df_sorted.iterrows():
+        for index, sale in df_final.iterrows():
             tmp = sale
             if previous_day != sale.date:
-                portfolio_value, cash, payments, earnings = portfolio_metrics.loc[previous_day][['portfolio_value', 'cash', 'payments', 'earnings']]
-                portfolio_metrics.loc[sale.date, 'cash'] = cash * weekly_risk_free_rate - payments + earnings
+                portfolio_value, cash, payments, earnings, fees = portfolio_metrics.loc[previous_day][['portfolio_value', 'cash', 'payments', 'earnings', 'fees']]
+                portfolio_metrics.loc[sale.date, 'cash'] = cash * weekly_risk_free_rate - payments + earnings - fees
                 previous_day = sale.date
 
             else:
                 portfolio_value, cash, payments, earnings = portfolio_metrics.loc[sale.date][['portfolio_value', 'cash', 'payments', 'earnings']]
 
-            amount = np.floor(cash*sale.allocation / 4) # 25% at each week
+            amount = np.floor(cash*sale.allocation / 4 / multiplier ) # 25% at each week
+            portfolio_metrics.loc[sale.date, 'fees']  += min(1, multiplier * sale.commission)
 
             try: #trying and catching if it fails is faster than checking beforehand, because fails are rate
                 expiry = sale.date + dt.timedelta(days=int(sale.days)) + dt.timedelta(days=6) # adding 6 days so that it ends up on a rebalancing friday
-                if not expiry > df_sorted.date.max():
-                    portfolio_metrics.loc[expiry, 'payments']       += amount* max(0, sale.strike_price - stockprices.loc[expiry.date(), sale.id])
-                portfolio_metrics.loc[sale.date, 'earnings']    += amount* sale.best_bid
+                if not expiry > df_final.date.max():
+                    portfolio_metrics.loc[expiry, 'payments'] += multiplier * amount* max(0, sale.strike_price - stockprices.loc[expiry.date(), sale.id])
+                portfolio_metrics.loc[sale.date, 'earnings']  += multiplier * amount* sale.best_bid
             except:
                 # 1997-03-28 was was a good friday holiday:
                 # http://www.cboe.com/aboutcboe/cboe-cbsx-amp-cfe-press-releases?DIR=ACNews&FILE=na321.doc&CreateDate=21.03.1997&Title=CBOE%20announces%20Good%20Friday%20trading%20schedule
@@ -872,13 +890,12 @@ def evaluate_strategy(
                 closest_expiry = expiry
                 #next_rebalancing_day = expiry + dt.timedelta(days=7)
                 next_rebalancing_index = portfolio_metrics.index.get_loc(sale.date) + 1
-                payments_column_index = 2
                 for i in range(10):
                     closest_expiry -= dt.timedelta(days=1)
                     if (stockprices.index == closest_expiry.date()).any():
-                        if not expiry > df_sorted.date.max():
-                            portfolio_metrics.iloc[next_rebalancing_index, payments_column_index] += amount * max(0, sale.strike_price - stockprices.loc[ closest_expiry.date(), sale.id])
-                        portfolio_metrics.loc[sale.date, 'earnings'] += amount* sale.best_bid
+                        if not expiry > df_final.date.max():
+                            portfolio_metrics.iloc[next_rebalancing_index, payments_column_index] += multiplier * amount * max(0, sale.strike_price - stockprices.loc[ closest_expiry.date(), sale.id])
+                        portfolio_metrics.loc[sale.date, 'earnings'] += multiplier * amount* sale.best_bid
                         break
 
         # not sure which annualization method to use
@@ -894,128 +911,8 @@ def evaluate_strategy(
 
     #portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
 
-    return (sharperatio, annual_return, annual_vola)
-'''
+    return (sharperatio, annual_return, annual_vola, portfolio_metrics)
 
-    portfolio = {}
-    portfolio['metrics']            = pd.DataFrame(index=stockprices.index, columns=['portfolio_value', 'payments', 'earnings', 'returns'])
-    portfolio['cash']               = pd.DataFrame(index=stockprices.index, columns=['cash'])
-    portfolio['amounts']            = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-    portfolio["strikes"]            = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-    portfolio["daysToExpiry"]       = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-    portfolio["expiry"]             = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-    portfolio["price"]              = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-    portfolio["delta"]              = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-    portfolio["implied_volatility"] = pd.DataFrame(index=stockprices.index, columns=stockprices.columns)
-
-    previous_year = 0
-    for day in stockprices.index[0:5]:
-
-        print(day)
-        if previous_year != day.year:
-            previous_year = day.year
-            options_data_year = get_optionsdata_for_year(day.year)
-
-            #options_data_year['date'] = list(x.date() for x in list(pd.to_datetime(options_data_year.date)))    #delete me
-            #options_data_year = options_data_year[0:1246024]                                                    #delete me
-        opday = options_data_year.loc[options_data_year.date == pd.to_datetime(day)]
-
-        # list(set(list1).intersection(list2))
-        # stocklist = opday.id.unique()
-        FCFF_filtered.loc[day].dropna(axis=0).index
-        stocklist = list(set(FCFF_filtered.loc[day].dropna(axis=0).index).intersection(opday.id.unique()))
-        counter = 0
-        for stock in stocklist:
-            counter = counter + 1
-            print(str(counter) + '/' + str(len(stocklist)))
-            opstock = opday.loc[opday.id == int(stock)]
-
-            if len(opstock) > 0:
-                #opstock['strike_price'] = opstock['strike_price'].div(1000)
-                stockprices.loc[day,stock]
-                strike_fit_index = opstock.iloc[np.absolute((opstock['strike_price'] - target_strike.loc[day,stock]).values).argsort()].index[0]
-                #best_fit_index = strike_fit_index
-                shortlist = opstock.loc[opstock['strike_price'] == opstock.loc[strike_fit_index].strike_price]
-                best_fit_index = shortlist.iloc[np.absolute((shortlist['days'] - 30).values).argsort()].index[0]
-
-                portfolio["strikes"].loc[day, stock]            = opstock.loc[best_fit_index]['strike_price']
-                portfolio["daysToExpiry"].loc[day, stock]       = opstock.loc[best_fit_index]['days']
-                portfolio["expiry"].loc[day, stock]             = day + dt.timedelta(days=int(opstock.loc[best_fit_index]['days']))
-                portfolio["price"].loc[day, stock]              = opstock.loc[best_fit_index]['best_bid']
-                portfolio["delta"].loc[day, stock]              = 0.5 # opstock.loc[best_fit_index]['delta']
-                portfolio["implied_volatility"].loc[day, stock] = opstock.loc[best_fit_index]['impl_volatility']
-
-
-    risk = portfolio["implied_volatility"] * portfolio["delta"] * -1
-
-    weights = (risk.T / risk.sum(axis=1)).T
-    allocation = (weights / stockprices) / coverage
-    portfolio['metrics'].loc[stockprices.index[0], 'portfolio_value'] = initial_cash
-    portfolio['cash'].iloc[0] = initial_cash
-
-    for i in range(len(stockprices.index)):
-        investment_volume = portfolio['metrics'].portfolio_value.iloc[i] / rebalancing_frequency
-        portfolio['amounts'].iloc[i] = ((investment_volume * allocation.iloc[i])).apply(lambda x: np.floor(x))
-        payments = 0
-        for stock in stockprices.columns:
-            for j in range(-5,0):
-                if i+j > 0:
-                    expiry = portfolio["expiry"].iloc[i+j].loc[stock]
-                    if (not pd.isnull(expiry)) and expiry >= stockprices.index[i]:
-                        payments = payments + max(0,portfolio["strikes"].iloc[i+j].loc[stock] - stockprices.iloc[i].loc[stock])
-                        portfolio['expiry'].loc[stockprices.index[i+j], stock] = np.nan
-                        #payments = payments + sum(portfolio["strikes"].iloc[i+j] - stockprices.iloc[i]).apply(lambda x: max(0,x))
-
-        np.nan_to_num(portfolio['amounts'].iloc[i] * portfolio['price'].iloc[i])
-        earnings = sum((portfolio['amounts'].iloc[i] * portfolio['price'].iloc[i]).apply(lambda x: np.nan_to_num(x)))
-        portfolio['metrics'].loc[stockprices.index[i],'payments'] = payments
-        portfolio['metrics'].loc[stockprices.index[i],'earnings'] = earnings
-
-        if not i+1 >= len(stockprices.index):
-            portfolio['cash'].iloc[i+1] = portfolio['cash'].iloc[i] - payments + earnings
-            # very rough approximation
-            portfolio['metrics'].loc[stockprices.index[i + 1], 'portfolio_value'] = portfolio['cash'].iloc[i+1].cash
-
-
-    ann = 251 / rebalancing_frequency
-    portfolio['metrics'].returns = portfolio['metrics'].portfolio_value.pct_change()
-    portfolio_returns       = portfolio['metrics'].returns.mean()*ann
-    portfolio_vola          = portfolio['metrics'].returns.std()*np.sqrt(ann)
-    portfolio_sharperatio   = portfolio_returns / portfolio_vola
-    portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
-
-    return (portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown)
-'''
-
-'''
-stockprices, prices_raw, comp_const, CRSP_const, VIX = load_data()
-evaluate_strategy(stockprices = stockprices)
-'''
-
-'''
-# # TimeStep (obsolete)
-
-def timestep(
-        time,
-        portfolio,
-        coverage,
-        quantile,
-        strike_0,
-        strike_1,
-        stockprices,
-        options,
-        FCFF,
-        VIX,
-        membership,):
-    # determine P&L from maturing batch of Puts
-    # pick stocks
-    # pick strikes
-    # pick weights (depending on remaining capital)
-    # return updated portfolio
-
-    portfolio_new = portfolio
-    return portfolio_new
-'''
 
 # # Main: Data Loading & Approach Evaluation
 
