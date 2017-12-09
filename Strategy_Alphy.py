@@ -485,59 +485,34 @@ def store_options(CRSP_const, prices):
             ##
 
 
-def store_options_as_nested_df(CRSP_const, prices):
-    open(paths['options_nested_df'], 'w').close()  # deletes previous hdf store
-    store = pd.HDFStore(paths['options_nested_df'])
-    for file in paths['options']:
-        # with open(file, 'r') as file:
-        # file = paths['options'][0]
-        print('reading: ' + file)
-        year_index = file.find('rawopt_')
-        year = int(file[year_index + 7:year_index + 7 + 4])
+def preprocess_options_data():
+    start_year = 1996
+    end_year = 2016
+    df = pd.DataFrame()
+    for year in range(start_year, end_year):  # range(1996, 2016)
+        options_data_year = get_optionsdata_for_year(year)
+        df = df.append(options_data_year)
 
-        unprocessed_data = pd.read_csv(file)
-        dt.datetime.strptime(unprocessed_data.date[0], '%d%b%Y')
+    df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
+    df_nice_maturities = df_fridays[df_fridays['days'].isin([29, 22, 43, 36])]
+    # if len(df_nice_maturities) == 0:
+    print("fixing")
+    '''
+    on fridays the remaining days will always be one of these values: 8, 15, 22, 29, 36, 43, 50, 57
+    this was true for all 1996 and 1997, so I assume it is true for all years
+    on any given friday, two of these maturities will be available for selling, and these two are 28 days apart
+    that makes filtering for just the ones we want to invest in straightforward
+    29,22,43,36
+    '''
+    to_be_replaced = [6, 7, 8, 13, 14, 15, 20, 21, 27, 28, 34, 35, 41, 42, 48, 49, 56]
+    replacements = [8, 8, 8, 15, 15, 15, 22, 22, 29, 29, 36, 36, 43, 43, 50, 50, 57]
+    df_fridays['days'].replace(to_be_replaced, replacements, inplace=True)
+    df_nice_maturities = df_fridays[df_fridays['days'].isin([29, 22, 43, 36])]
+    print("fixed")
 
-        print('transforming dates into usable format')
-        unprocessed_data.loc[:, 'formatted_day'] = list(
-            dt.datetime.strptime(x, '%d%b%Y').date() for x in unprocessed_data.date)
-        counter = 0
-        relevant_days_index = prices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
-
-        target = len(relevant_days_index) * len(prices.columns)
-        optionsdata = pd.DataFrame(index=relevant_days_index, columns=prices.columns)
-
-        def to_date(string):
-            return dt.datetime.strptime(string, '%Y-%m-%d').date()
-
-        for day in relevant_days_index:
-            CRSP_const
-            for stock in prices.columns:
-                str(int(stock))
-
-                if ((CRSP_const.PERMNO == int(stock)) & (CRSP_const.start.apply(to_date) >= day) & (
-                    CRSP_const.ending.apply(to_date) <= day)).any():
-                    optionsday = unprocessed_data[
-                        (unprocessed_data.formatted_day == day) | (unprocessed_data.id == stock)]
-                    if len(optionsday.index) == 0:
-                        optionsdata.at[day, stock] = np.nan
-                    else:
-                        formatted_optionsday = pd.DataFrame(
-                            columns=['strike', 'daysToExpiry', 'price', 'delta', 'implied_volatiliy']
-                        )
-                        formatted_optionsday.strike = optionsday.strike_price
-                        formatted_optionsday.daysToExpiry = optionsday.days
-                        formatted_optionsday.price = optionsday.best_bid
-                        formatted_optionsday.delta = - optionsday.delta  # removing the negativity, we don't need it
-                        formatted_optionsday.implied_volatiliy = optionsday.impl_volatility
-                        optionsdata.at[day, stock] = formatted_optionsday
-                else:
-                    optionsdata.at[day, stock] = np.nan
-                counter = counter + 1
-                print(str(year) + ': ' + str(counter) + '/' + str(target))
-        store.append('options', optionsdata, index=False)
+    store = pd.HDFStore(paths['preprocessed_options'])
+    store['preprocessed_options'] = df_nice_maturities
     store.close()
-
 
 command = 'load_data()'
 command = 'store_options_as_nested_df(CRSP_const, prices)'
@@ -742,39 +717,6 @@ command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_
 
 # run_profiler(command)
 
-def preprocess_options_data():
-    start_year = 1996
-    end_year = 2016
-    df = pd.DataFrame()
-    for year in range(start_year, end_year):  # range(1996, 2016)
-        options_data_year = get_optionsdata_for_year(year)
-        df = df.append(options_data_year)
-
-    df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
-    df_nice_maturities = df_fridays[df_fridays['days'].isin([29, 22, 43, 36])]
-    # if len(df_nice_maturities) == 0:
-    print("fixing")
-    '''
-    on fridays the remaining days will always be one of these values: 8, 15, 22, 29, 36, 43, 50, 57
-    this was true for all 1996 and 1997, so I assume it is true for all years
-    on any given friday, two of these maturities will be available for selling, and these two are 28 days apart
-    that makes filtering for just the ones we want to invest in straightforward
-    29,22,43,36
-    '''
-    to_be_replaced = [6, 7, 8, 13, 14, 15, 20, 21, 27, 28, 34, 35, 41, 42, 48, 49, 56]
-    replacements = [8, 8, 8, 15, 15, 15, 22, 22, 29, 29, 36, 36, 43, 43, 50, 50, 57]
-    df_fridays['days'].replace(to_be_replaced, replacements, inplace=True)
-    df_nice_maturities = df_fridays[df_fridays['days'].isin([29, 22, 43, 36])]
-    print("fixed")
-
-    store = pd.HDFStore(paths['preprocessed_options'])
-    store['preprocessed_options'] = df_nice_maturities
-    store.close()
-
-
-def load_preprocessed_options_data():
-
-
 def evaluate_strategy(
         coverage=1,
         quantile=0.1,  # lower mean we include fewer stocks
@@ -868,8 +810,7 @@ def evaluate_strategy(
             risk_dict[risk, date] = total_risk, total_weight
         else:
             (total_risk, total_weight) = risk_dict[risk, date]
-        total_risk_weight = (total_risk / risks ).sum()
-        weight = (total_risk / risk) / total_risk_weight
+        weight = (total_risk / risk) / total_weight
         return weight
 
     allocation = df_risky[['risk', 'date', 'id']].apply( lambda x: get_weight(x[0], x[1]) / stockprices.loc[x[1].date(), x[2]] / coverage, axis=1)
