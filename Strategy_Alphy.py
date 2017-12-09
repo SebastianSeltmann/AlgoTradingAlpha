@@ -934,7 +934,7 @@ def evaluate_strategy(
 
             amount = np.floor(cash * sale.allocation / 4 / multiplier)  # 25% at each week
 
-            df_final.iloc[index, amount_column_index] = amount
+            df_final.loc[index, 'amount'] = amount
             max_amount, max_amount_sale = inc_amount_counter(amount, sale, max_amount, max_amount_sale)
             portfolio_metrics.loc[sale.date, 'fees'] += min(1, multiplier * sale.commission)
             '''
