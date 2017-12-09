@@ -1,4 +1,3 @@
-
 ## ---------------------- IMPORT PACKAGES ----------------------------
 import sys
 import pandas as pd
@@ -6,18 +5,16 @@ from scipy.optimize import minimize
 from sklearn.model_selection import TimeSeriesSplit
 import numpy as np
 import datetime as dt
-#import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import time
 import pandas_datareader.data as web
-#import openpyxl
+# import openpyxl
 import quandl
 import wrds
 import cProfile
 import pstats
 import gc
 import pickle
-
-
 
 ## ----------------------- SETTINGS ----------------------------------
 # gc.disable()
@@ -29,35 +26,35 @@ rootpath = F.read()
 F.close()
 # rootpath = "C:\\AlgoTradingData\\"
 paths = {}
-paths['quandl_key']                 = rootpath + "quandl_key.txt"
-paths['stockprices']                = rootpath + "stockprices.h5"
-paths['vix']                        = rootpath + "vix.h5"
-paths['FCFF']                       = rootpath + "FCFF.h5"
-paths['pseudo_store']               = rootpath + "retdata.h5"
-paths['sp500list']                  = rootpath + "Constituents.xlsx"
-paths['sp500_permnos']              = rootpath + "SP500_permnos.csv"
-paths['h5 constituents & prices']   = rootpath + "Data[IDs, constituents, prices].h5"
+paths['quandl_key'] = rootpath + "quandl_key.txt"
+paths['stockprices'] = rootpath + "stockprices.h5"
+paths['vix'] = rootpath + "vix.h5"
+paths['FCFF'] = rootpath + "FCFF.h5"
+paths['pseudo_store'] = rootpath + "retdata.h5"
+paths['sp500list'] = rootpath + "Constituents.xlsx"
+paths['sp500_permnos'] = rootpath + "SP500_permnos.csv"
+paths['h5 constituents & prices'] = rootpath + "Data[IDs, constituents, prices].h5"
 paths['xlsx constituents & prices'] = rootpath + "Data[IDs, constituents, prices].xlsx"
-paths['raw prices']                 = rootpath + "Data[raw prices].csv"
-paths['fn_AccountingData_xlsx']     = rootpath + "Accounting_data_raw.xlsx"
-paths['Fundamentals.xlsx']          = rootpath + "Fundamentals.xlsx"
-paths['Fundamentals.h5']            = rootpath + "Fundamentals.h5"
+paths['raw prices'] = rootpath + "Data[raw prices].csv"
+paths['fn_AccountingData_xlsx'] = rootpath + "Accounting_data_raw.xlsx"
+paths['Fundamentals.xlsx'] = rootpath + "Fundamentals.xlsx"
+paths['Fundamentals.h5'] = rootpath + "Fundamentals.h5"
 paths['permno_gvkeys_linkage.xlsx'] = rootpath + "permno_gvkeys_linkage.xlsx"
-paths['FCFF.xlsx']                  = rootpath + "FCFF.xlsx"
-paths['FCFF.h5']                    = rootpath + "FCFF.h5"
-paths['fn_Prices_xlsx']             = rootpath + "Data[IDs, constituents, prices].xlsx"
-paths['Prices.xlsx']                = rootpath + "Prices.xlsx"
-paths['Prices.h5']                  = rootpath + "Prices.h5"
-paths['Linkage.xlsx']               = rootpath + "Linkage.xlsx"
-paths['Linkage.h5']                 = rootpath + "Linkage.h5"
-paths['all_options_csv']            = rootpath + "all_options.csv"
-paths['all_options_h5']             = rootpath + "all_options.h5"
-paths['all_options2_h5']            = rootpath + "all_options2.h5"
-paths['all_options3_h5']            = rootpath + "all_options3.h5"
-paths['preprocessed_options']       = rootpath + "preprocessed_options.5"
-paths['options_nested_df']          = rootpath + "options_nested_df.h5"
-paths['profiler']                   = rootpath + "profile_data"
-paths['results']                    = rootpath + "results.pkl"
+paths['FCFF.xlsx'] = rootpath + "FCFF.xlsx"
+paths['FCFF.h5'] = rootpath + "FCFF.h5"
+paths['fn_Prices_xlsx'] = rootpath + "Data[IDs, constituents, prices].xlsx"
+paths['Prices.xlsx'] = rootpath + "Prices.xlsx"
+paths['Prices.h5'] = rootpath + "Prices.h5"
+paths['Linkage.xlsx'] = rootpath + "Linkage.xlsx"
+paths['Linkage.h5'] = rootpath + "Linkage.h5"
+paths['all_options_csv'] = rootpath + "all_options.csv"
+paths['all_options_h5'] = rootpath + "all_options.h5"
+paths['all_options2_h5'] = rootpath + "all_options2.h5"
+paths['all_options3_h5'] = rootpath + "all_options3.h5"
+paths['preprocessed_options'] = rootpath + "preprocessed_options.h5"
+paths['options_nested_df'] = rootpath + "options_nested_df.h5"
+paths['profiler'] = rootpath + "profile_data"
+paths['results'] = rootpath + "results.pkl"
 
 paths['options_pickl_path'] = {}
 paths['options'] = []
@@ -70,12 +67,9 @@ for y in range(1996, 2017):
 #                           DATA SOURCING
 ## -------------------------------------------------------------------
 def store_sp500():
-
-
     ## ---------------------- WRDS CONNECTION  ------------------------
 
     db = wrds.Connection()
-
 
     ## ----------------- SOURCING S&P 500 CONSTITUENTS --------------------
 
@@ -135,12 +129,13 @@ def store_sp500():
     store.close()
     return prc_merge, crsp_id
 
+
 def store_fundamentals():
     print('reading accounting data excel')
     df_AccountingData = pd.read_excel(paths['fn_AccountingData_xlsx'])
 
     # %%
-    #fundamentalNames = pd.DataFrame(df_AccountingData.columns.values)
+    # fundamentalNames = pd.DataFrame(df_AccountingData.columns.values)
 
     # %% Create new Date called as Final Date
 
@@ -183,7 +178,8 @@ def store_fundamentals():
         #   x= pd.pivot_table(df_AccountingData,index=["Data Date"],columns=["Global Company Key"],values=[col],fill_value=0)  # Take output file=fundamentals1.xlsx to compare
 
         try:
-            x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col], fill_value=0)
+            x = pd.pivot_table(df_AccountingData, index=["Final Date"], columns=["Global Company Key"], values=[col],
+                               fill_value=0)
             x.columns = x.columns.droplevel()
             fundamentals[col] = x
         except:
@@ -193,7 +189,6 @@ def store_fundamentals():
 
     date_index = pd.date_range(start='1989.09.30', end='2018.03.31', freq='D')
     date_index = [dt.datetime.strftime(d, "%Y/%m/%d") for d in date_index]
-
 
     s1 = pd.DataFrame(fundamentals["Capital Expenditures"])
     s1 = pd.DataFrame(s1.reindex(date_index, method='ffill'))
@@ -286,8 +281,8 @@ def store_fundamentals():
     # %% To have common dates values for Price and FCFF1 dataframes
 
     df_Prices = pd.read_excel(paths['fn_Prices_xlsx'], sheet_name="Prices")
-    #file = pd.ExcelFile(paths['fn_Prices_xlsx'])
-    #df_Prices = file.parse('Prices')
+    # file = pd.ExcelFile(paths['fn_Prices_xlsx'])
+    # df_Prices = file.parse('Prices')
 
     df_Prices.set_index('date', inplace=True)
     date_index = df_Prices.index
@@ -327,7 +322,7 @@ def store_fundamentals():
         df_Prices1.columns.values[i] = c
         i = i + 1
 
-    FCFF2 = FCFF2.applymap (lambda x: np.nan if x == 0 else x)
+    FCFF2 = FCFF2.applymap(lambda x: np.nan if x == 0 else x)
 
     FCFF2['pdDates'] = list(x.date() for x in list(pd.to_datetime(FCFF2.index)))
     FCFF2['date'] = list(x.date() for x in list(pd.to_datetime(FCFF2.index)))
@@ -336,12 +331,12 @@ def store_fundamentals():
     # %% Saving the FCFF data
     # writing to excel
 
-    writer = pd.ExcelWriter(paths['FCFF.xlsx'] )
+    writer = pd.ExcelWriter(paths['FCFF.xlsx'])
     FCFF2.to_excel(writer, 'FCFF')
     writer.save()
 
     # writing to hd5 file
-    store = pd.HDFStore(paths['FCFF.h5'] )
+    store = pd.HDFStore(paths['FCFF.h5'])
     store['FCFF'] = FCFF2
     store.close()
 
@@ -366,7 +361,6 @@ def store_fundamentals():
     store = pd.HDFStore(paths['Linkage.h5'])
     store['Linkage'] = df_Linkage2
     store.close()
-
 
     # Saving the Fundamentals
 
@@ -408,6 +402,8 @@ def store_cleaned_FCFF(prices, linkage):
     store['vix'] = fitted_vix
     store.close()
 '''
+
+
 def store_vix(prices):
     '''
     # Earliest VIX available from quandl is 2005
@@ -421,19 +417,20 @@ def store_vix(prices):
     print(VIX.index.min())
     '''
 
-    years = range(1990,2018)
+    years = range(1990, 2018)
     attempts = 30
-    for i in range(len(years)-1):
+    for i in range(len(years) - 1):
         print(str(years[i]))
-        while(attempts > 0):
+        while (attempts > 0):
             try:
                 if i == 0:
-                    vix = web.DataReader('^VIX', 'yahoo', str(years[i]) + '-01-01', str(years[i+1]) + '-01-01')
+                    vix = web.DataReader('^VIX', 'yahoo', str(years[i]) + '-01-01', str(years[i + 1]) + '-01-01')
                 else:
-                    vix = vix.append(web.DataReader('^VIX', 'yahoo', str(years[i]) + '-01-01', str(years[i+1]) + '-01-01'))
+                    vix = vix.append(
+                        web.DataReader('^VIX', 'yahoo', str(years[i]) + '-01-01', str(years[i + 1]) + '-01-01'))
                 break
             except:
-                print('trying again ' + str(attempts-1) + '...')
+                print('trying again ' + str(attempts - 1) + '...')
                 attempts = attempts - 1
     vix['pdDates'] = list(x.date() for x in list(pd.to_datetime(vix.index)))
     vix.drop_duplicates(inplace=True)
@@ -441,17 +438,15 @@ def store_vix(prices):
     fitted_vix['date'] = list(x.date() for x in list(pd.to_datetime(fitted_vix.index)))
     fitted_vix = fitted_vix.set_index('date')
     fitted_vix.drop(prices.columns, axis=1, inplace=True)
-    fitted_vix.drop('pdDates',axis=1, inplace= True)
+    fitted_vix.drop('pdDates', axis=1, inplace=True)
     store = pd.HDFStore(paths['vix'])
     store['vix'] = fitted_vix
     store.close()
 
 
-
 def store_options(CRSP_const, prices):
-
     ## Create constituents data frame
-    open(paths['all_options_h5'], 'w').close()   # delete HDF
+    open(paths['all_options_h5'], 'w').close()  # delete HDF
     CRSP_const = CRSP_const[CRSP_const['ending'] > '1996-01-01']
 
     ids = CRSP_const
@@ -467,17 +462,17 @@ def store_options(CRSP_const, prices):
     for file in paths['options']:
         with open(file, 'r') as o:
             print(file)
-            data  = pd.read_csv(o)
+            data = pd.read_csv(o)
             year_index = file.find('rawopt_')
             cur_y = file[year_index + 7:year_index + 7 + 4]
-            idx1  = st_y <= cur_y
-            idx2  = en_y >= cur_y
-            idx   = idx1 & idx2
+            idx1 = st_y <= cur_y
+            idx2 = en_y >= cur_y
+            idx = idx1 & idx2
             const = CRSP_const.loc[idx, :].reset_index(drop=True)
             listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'delta', 'strike_price']],
                              const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
-            listO['date']  = pd.to_datetime(listO['date'], format = '%d%b%Y')
-            idx3  = listO['delta'] < 0
+            listO['date'] = pd.to_datetime(listO['date'], format='%d%b%Y')
+            idx3 = listO['delta'] < 0
             listO = listO.loc[idx3, :]
             listO['strike_price'] = listO['strike_price'] / 1000
             print(listO.shape)
@@ -486,14 +481,15 @@ def store_options(CRSP_const, prices):
             store.close()
 
 
-    ##
+            ##
+
 
 def store_options_as_nested_df(CRSP_const, prices):
-    open(paths['options_nested_df'], 'w').close() #deletes previous hdf store
+    open(paths['options_nested_df'], 'w').close()  # deletes previous hdf store
     store = pd.HDFStore(paths['options_nested_df'])
     for file in paths['options']:
-        #with open(file, 'r') as file:
-        #file = paths['options'][0]
+        # with open(file, 'r') as file:
+        # file = paths['options'][0]
         print('reading: ' + file)
         year_index = file.find('rawopt_')
         year = int(file[year_index + 7:year_index + 7 + 4])
@@ -501,13 +497,13 @@ def store_options_as_nested_df(CRSP_const, prices):
         unprocessed_data = pd.read_csv(file)
         dt.datetime.strptime(unprocessed_data.date[0], '%d%b%Y')
 
-
         print('transforming dates into usable format')
-        unprocessed_data.loc[:,'formatted_day'] = list(dt.datetime.strptime(x, '%d%b%Y').date() for x in unprocessed_data.date)
+        unprocessed_data.loc[:, 'formatted_day'] = list(
+            dt.datetime.strptime(x, '%d%b%Y').date() for x in unprocessed_data.date)
         counter = 0
-        relevant_days_index = prices[dt.date(year,1,1):dt.date(year+1,1,1)].index
+        relevant_days_index = prices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
 
-        target = len(relevant_days_index)*len(prices.columns)
+        target = len(relevant_days_index) * len(prices.columns)
         optionsdata = pd.DataFrame(index=relevant_days_index, columns=prices.columns)
 
         def to_date(string):
@@ -518,24 +514,26 @@ def store_options_as_nested_df(CRSP_const, prices):
             for stock in prices.columns:
                 str(int(stock))
 
-                if ((CRSP_const.PERMNO == int(stock)) & (CRSP_const.start.apply(to_date) >= day) & (CRSP_const.ending.apply(to_date) <= day)).any():
-                    optionsday = unprocessed_data[(unprocessed_data.formatted_day == day) | (unprocessed_data.id == stock)]
+                if ((CRSP_const.PERMNO == int(stock)) & (CRSP_const.start.apply(to_date) >= day) & (
+                    CRSP_const.ending.apply(to_date) <= day)).any():
+                    optionsday = unprocessed_data[
+                        (unprocessed_data.formatted_day == day) | (unprocessed_data.id == stock)]
                     if len(optionsday.index) == 0:
                         optionsdata.at[day, stock] = np.nan
                     else:
                         formatted_optionsday = pd.DataFrame(
                             columns=['strike', 'daysToExpiry', 'price', 'delta', 'implied_volatiliy']
                         )
-                        formatted_optionsday.strike             = optionsday.strike_price
-                        formatted_optionsday.daysToExpiry       = optionsday.days
-                        formatted_optionsday.price              = optionsday.best_bid
-                        formatted_optionsday.delta              = - optionsday.delta # removing the negativity, we don't need it
-                        formatted_optionsday.implied_volatiliy  = optionsday.impl_volatility
-                        optionsdata.at[day,stock] = formatted_optionsday
+                        formatted_optionsday.strike = optionsday.strike_price
+                        formatted_optionsday.daysToExpiry = optionsday.days
+                        formatted_optionsday.price = optionsday.best_bid
+                        formatted_optionsday.delta = - optionsday.delta  # removing the negativity, we don't need it
+                        formatted_optionsday.implied_volatiliy = optionsday.impl_volatility
+                        optionsdata.at[day, stock] = formatted_optionsday
                 else:
                     optionsdata.at[day, stock] = np.nan
                 counter = counter + 1
-                print (str(year) + ': ' + str(counter) + '/' + str(target))
+                print(str(year) + ': ' + str(counter) + '/' + str(target))
         store.append('options', optionsdata, index=False)
     store.close()
 
@@ -544,14 +542,15 @@ command = 'load_data()'
 command = 'store_options_as_nested_df(CRSP_const, prices)'
 
 command = 'laufen()'
+
+
 def run_profiler(command):
-    #prices, prices_raw, comp_const, CRSP_const, vix, FCFF = load_data()
+    # prices, prices_raw, comp_const, CRSP_const, vix, FCFF = load_data()
     print('Profiler Running')
     cProfile.run(command, filename=paths['profiler'])
     p = pstats.Stats(paths['profiler'])
     p.sort_stats('cumulative').print_stats(10)
     p.sort_stats('tottime').print_stats(10)
-
 
 
 def store_data():
@@ -577,7 +576,6 @@ def store_data():
 
 
 def load_data():
-
     # # Data Storing and calling
     store = pd.HDFStore(paths['h5 constituents & prices'])
     prices = store['Prices']
@@ -611,26 +609,28 @@ def load_data():
 
     return prices, prices_raw, comp_const, CRSP_const, vix, FCFF, options
 
+
 def load_chunked_data(chunksize=251):
-    reader_stockprices      = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
-    #reader_options          = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_options          = pd.read_hdf(paths['all_options_h5'], 'options', chunksize=chunksize)
-    reader_FCFF             = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_membership       = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_vix              = pd.read_hdf(paths['vix'], sep=',', chunksize=chunksize)
+    reader_stockprices = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
+    # reader_options          = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_options = pd.read_hdf(paths['all_options_h5'], 'options', chunksize=chunksize)
+    reader_FCFF = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_membership = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
+    reader_vix = pd.read_hdf(paths['vix'], sep=',', chunksize=chunksize)
     return zip(reader_stockprices, reader_options, reader_FCFF, reader_membership)
 
-def call_options_data():
 
+def call_options_data():
     store = pd.HDFStore(paths['all_options2_h5'])
-    x     = store.select(key = 'options2', where = 'date == ["02JAN2000"]')
+    x = store.select(key='options2', where='date == ["02JAN2000"]')
 
     store.close()
 
     store = pd.HDFStore(rootpath + "draft_options2.h5")
-    x = store.append('options2', x, data_columns = True)
+    x = store.append('options2', x, data_columns=True)
     store['options2'] = x
     store.close()
+
 
 # # Optimization Process
 def objective(
@@ -639,44 +639,45 @@ def objective(
         options,
         FCFF,
         VIX,
-        membership,):
+        membership, ):
     portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown = evaluate_strategy(
-        params[0], #coverage,
-        params[1], #quantile,
-        params[2], #strike_0,
-        params[3], #strike_1,
+        params[0],  # coverage,
+        params[1],  # quantile,
+        params[2],  # strike_0,
+        params[3],  # strike_1,
         stockprices,
         options,
         FCFF,
         VIX,
-        membership,)
+        membership, )
     # We are interested in maximizing the first of the evaluation metrics
     # We achieve this by minimizing the negative of the first metric
     return - (portfolio_sharperatio)
 
+
 def optimize(
-            stockprices,
-            options,
-            FCFF,
-            VIX,
-            membership,):
+        stockprices,
+        options,
+        FCFF,
+        VIX,
+        membership, ):
     # create the parameters of our strategy: coverage, quantile & strike regression
     # call scipy library and let it optimize the values for the parameters, for certain return metrics
     # return these optimized parameters
 
     bounds = [
-        (0.1,1),        # coverage
-        (0.01,1),       # quantile
-        (None,None),    # strike_0
-        (None,None)     # strike_1
+        (0.1, 1),  # coverage
+        (0.01, 1),  # quantile
+        (None, None),  # strike_0
+        (None, None)  # strike_1
     ]
 
     initial_guesses = [0.9, 0.9, 1, 0]
     minimization = minimize(
-        fun = objective,
-        x0 = initial_guesses,
-        args = (stockprices, options, FCFF, VIX, membership),
-        bounds = bounds
+        fun=objective,
+        x0=initial_guesses,
+        args=(stockprices, options, FCFF, VIX, membership),
+        bounds=bounds
     )
     print(minimization)
     (
@@ -691,11 +692,12 @@ def optimize(
 # # Strategy Evaluation
 
 def max_dd(ser):
-    ser    = pd.Series(ser)
-    zzmax  = ser.expanding().max()
-    zzmin  = ser[-1::-1].expanding().min()[-1::-1]
-    mdd    = (zzmin/zzmax-1).min()
+    ser = pd.Series(ser)
+    zzmax = ser.expanding().max()
+    zzmin = ser[-1::-1].expanding().min()[-1::-1]
+    mdd = (zzmin / zzmax - 1).min()
     return mdd
+
 
 def get_optionsdata_for_year(year):
     store = pd.HDFStore(paths['all_options_h5'])
@@ -703,20 +705,17 @@ def get_optionsdata_for_year(year):
     store.close()
     return optionsdata_for_year
 
+
 def get_nested_optionsdata_for_year(year):
     return pd.read_pickle(paths['options_pickl_path'][year])
 
-def single_run(year=2014, strike_0 = 0.9):
-    print("loading general data for " + str(year))
-    stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF, options = load_data()
-    relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
-    current_stockprices = stockprices.loc[relevant_days_index]
-    current_FCFF        = FCFF.loc[relevant_days_index]
-    current_VIX         = VIX.loc[relevant_days_index]
 
-    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = evaluate_strategy( strike_0= strike_0, stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, options = options )
+def single_run(strike_0=0.9, strike_1=0):
+    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = evaluate_strategy(
+        strike_0=strike_0, stockprices=current_stockprices, FCFF=current_FCFF, VIX=current_VIX, options=options)
     print(portfolio_sharperatio, portfolio_returns, portfolio_volatility)
-    return(portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales)
+    return (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales)
+
 
 def run_and_store_results():
     '''
@@ -724,12 +723,22 @@ def run_and_store_results():
     portfolio_metrics.cash.plot()
     '''
     results = {}
-    results = pd.DataFrame (columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'metrics', 'sales'])
+    results = pd.DataFrame(columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'metrics', 'sales'])
     strike_1 = 0
     for strike_0 in [0.8, 0.9, 1, 1.1, 1.2]:
         print(str(strike_0))
-        results.append(single_run(strike_0 = strike_0, strike_1 = strike_1))
-        #for year in range(1996, 2016):
+        (SR, ret, vol, metrics, sales) = evaluate_strategy(strike_0=strike_0)
+        row = {
+            'strike_0': strike_0,
+            'strike_1':strike_1,
+            'SR':SR,
+            'ret':ret,
+            'vol':vol,
+            'metrics':metrics,
+            'sales':sales
+        }
+        results = results.append(row, ignore_index=True)
+        # for year in range(1996, 2016):
         #    # results[strike_0, year] = single_run(year= year, strike_0 = strike_0, strike_1 = strike_1)
 
     with open(paths['results'], 'wb') as handle:
@@ -738,26 +747,24 @@ def run_and_store_results():
     with open(paths['results'], 'rb') as handle:
         loaded_results = pickle.load(handle)
 
-    for year, tuple in results.items():
-        SR, ret, vol, metrics, sales = tuple
-        print('%4d: %2.2f %2.2f %2.2f' % (year, SR, ret, vol))
 
-
-command="single_run()"
+command = "single_run()"
 command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )"
+
+
 # run_profiler(command)
 
 def preprocess_options_data():
     start_year = 1996
     end_year = 2016
     df = pd.DataFrame()
-    for year in range(start_year, end_year): #range(1996, 2016)
+    for year in range(start_year, end_year):  # range(1996, 2016)
         options_data_year = get_optionsdata_for_year(year)
         df = df.append(options_data_year)
 
     df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
-    df_nice_maturities = df_fridays[df_fridays['days'].isin([29,22,43,36])]
-    #if len(df_nice_maturities) == 0:
+    df_nice_maturities = df_fridays[df_fridays['days'].isin([29, 22, 43, 36])]
+    # if len(df_nice_maturities) == 0:
     print("fixing")
     '''
     on fridays the remaining days will always be one of these values: 8, 15, 22, 29, 36, 43, 50, 57
@@ -767,9 +774,9 @@ def preprocess_options_data():
     29,22,43,36
     '''
     to_be_replaced = [6, 7, 8, 13, 14, 15, 20, 21, 27, 28, 34, 35, 41, 42, 48, 49, 56]
-    replacements   = [8, 8, 8, 15, 15, 15, 22, 22, 29, 29, 36, 36, 43, 43, 50, 50, 57]
-    df_fridays['days'].replace(to_be_replaced,replacements, inplace=True)
-    df_nice_maturities = df_fridays[df_fridays['days'].isin([29,22,43,36])]
+    replacements = [8, 8, 8, 15, 15, 15, 22, 22, 29, 29, 36, 36, 43, 43, 50, 50, 57]
+    df_fridays['days'].replace(to_be_replaced, replacements, inplace=True)
+    df_nice_maturities = df_fridays[df_fridays['days'].isin([29, 22, 43, 36])]
     print("fixed")
 
     store = pd.HDFStore(paths['preprocessed_options'])
@@ -782,13 +789,12 @@ def load_preprocessed_options_data():
 
 def evaluate_strategy(
         coverage=1,
-        quantile=0.1, # lower mean we include fewer stocks
+        quantile=0.1,  # lower mean we include fewer stocks
         strike_0=0.9,
         strike_1=0.0,
-        initial_cash = 10**6,
-        multiplier = 100,
-        weekly_risk_free_rate = 1.0,):
-
+        initial_cash=10 ** 6,
+        multiplier=100,
+        weekly_risk_free_rate=1.0, ):
     # define initial portfolio with cash only
     # loop through all assigned dates
     # determine overall success after all time
@@ -824,46 +830,49 @@ def evaluate_strategy(
     print('Preprocessing Data')
     relevant_days_index = all_stockprices[dt.date(start_year, 1, 1):dt.date(end_year, 1, 1)].index
     stockprices = all_stockprices.loc[relevant_days_index]
-    FCFF        = all_FCFF.loc[relevant_days_index]
-    VIX         = all_VIX.loc[relevant_days_index]
+    FCFF = all_FCFF.loc[relevant_days_index]
+    VIX = all_VIX.loc[relevant_days_index]
 
-    #df = optionsdata_for_year
+    # df = optionsdata_for_year
     # len(df) == 622719
 
 
     # keeping only the top q quantile
-    FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(1 - quantile,axis=1))]
-    stockprices_filtered = stockprices + FCFF_filtered*0
+    FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(1 - quantile, axis=1))]
+    stockprices_filtered = stockprices + FCFF_filtered * 0
     target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["Adj Close"], axis="index")
 
-    #len(df_nice_maturities) == 65736
+    # len(df_nice_maturities) == 65736
 
-    selected_target_strikes = all_options[['date','id']].apply(lambda x: target_strike.loc[x[0].date(),x[1]], axis=1)
-    df_selected = pd.concat([all_options, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0:'target_strike'})
+    selected_target_strikes = all_options[['date', 'id']].apply(lambda x: target_strike.loc[x[0].date(), x[1]], axis=1)
+    df_selected = pd.concat([all_options, selected_target_strikes], axis=1).dropna(axis=0).rename(
+        columns={0: 'target_strike'})
     # len(df_selected) == 31461
 
     diffs = np.abs(df_selected.strike_price - df_selected.target_strike)
-    df_with_diff = pd.concat([df_selected, diffs], axis=1).rename(columns={0:'abs_difference'})
+    df_with_diff = pd.concat([df_selected, diffs], axis=1).rename(columns={0: 'abs_difference'})
 
     min_dict = {}
 
-    def get_min_diff(date,id):
-        #optimized this by running it only once for each date+id combination
-        if not (date,id) in min_dict:
+    def get_min_diff(date, id):
+        # optimized this by running it only once for each date+id combination
+        if not (date, id) in min_dict:
             min_diff = df_with_diff[(df_with_diff.date == date) & (df_with_diff.id == id)].abs_difference.min()
-            min_dict[(date,id)] = min_diff
+            min_dict[(date, id)] = min_diff
         else:
-            min_diff = min_dict[(date,id)]
+            min_diff = min_dict[(date, id)]
         return min_diff
 
-    is_best_fit = df_with_diff[['date','id','abs_difference']].apply(lambda x: get_min_diff(x[0], x[1]) == x[2], axis=1)
+    is_best_fit = df_with_diff[['date', 'id', 'abs_difference']].apply(lambda x: get_min_diff(x[0], x[1]) == x[2],
+                                                                       axis=1)
 
     df_best = df_with_diff[is_best_fit]
     # len(df_best) == 9907
 
-    df_risky = pd.concat([df_best, df_best.delta * df_best.impl_volatility], axis=1).rename(columns={0:'risk'})
+    df_risky = pd.concat([df_best, df_best.delta * df_best.impl_volatility], axis=1).rename(columns={0: 'risk'})
 
     risk_dict = {}
+
     def get_total_risk_for_date(date):
         if not (date) in risk_dict:
             total_risk = df_risky[df_best.date == date].risk.sum()
@@ -872,9 +881,11 @@ def evaluate_strategy(
             total_risk = risk_dict[date]
         return total_risk
 
-    allocation = df_risky[['risk','date','id']].apply(lambda x: x[0] / get_total_risk_for_date(x[1]) / stockprices.loc[x[1].date(),x[2]] / coverage, axis=1)
-    df_allocated = pd.concat([df_risky, allocation], axis=1).rename(columns={0:'allocation'})
+    allocation = df_risky[['risk', 'date', 'id']].apply(
+        lambda x: x[0] / get_total_risk_for_date(x[1]) / stockprices.loc[x[1].date(), x[2]] / coverage, axis=1)
+    df_allocated = pd.concat([df_risky, allocation], axis=1).rename(columns={0: 'allocation'})
     df_sorted = df_allocated.sort_values(by=['date'])
+
     # Transaction fees based on Interactive Brokers
     # https://www.interactivebrokers.com/en/index.php?f=commission&p=options1
     def choose_commission(premium):
@@ -884,25 +895,28 @@ def evaluate_strategy(
             return 0.5
         else:
             return 0.25
+
     commissions = df_sorted['best_bid'].apply(lambda x: choose_commission(x)).rename('commission')
     df_final = pd.concat([df_sorted, commissions], axis=1)
 
-    portfolio_metrics = pd.DataFrame(index=df_final.date.unique(),columns=['portfolio_value', 'cash', 'earnings', 'payments', 'fees' ])
+    portfolio_metrics = pd.DataFrame(index=df_final.date.unique(),
+                                     columns=['portfolio_value', 'cash', 'earnings', 'payments', 'fees'])
 
     payments_column_index = portfolio_metrics.columns.get_loc('payments')
     cash_column_index = portfolio_metrics.columns.get_loc('cash')
 
-    portfolio_metrics.fillna({'payments':0,'earnings':0,'fees':0}, inplace=True)
+    portfolio_metrics.fillna({'payments': 0, 'earnings': 0, 'fees': 0}, inplace=True)
     # sale = df_final.iloc[0]
-    portfolio_metrics.iloc[0,cash_column_index] = initial_cash
-    previous_day = df_final.iloc[0,1] # first day
+    portfolio_metrics.iloc[0, cash_column_index] = initial_cash
+    previous_day = df_final.iloc[0, 1]  # first day
     print('Iterating through evaluation')
-    #sale = df_final.iloc[200]
+    # sale = df_final.iloc[200]
     tmp = np.nan
     # sale = df_final.loc[429770]
     amount_counter = {}
     max_amount = 0
     max_amount_sale = np.nan
+
     def inc_amount_counter(amount, sale, max_amount, max_amount_sale):
         if amount in amount_counter:
             amount_counter[amount] += 1
@@ -917,58 +931,65 @@ def evaluate_strategy(
         for index, sale in df_final.iterrows():
             tmp = sale
             if previous_day != sale.date:
-                portfolio_value, cash, payments, earnings, fees = portfolio_metrics.loc[previous_day][['portfolio_value', 'cash', 'payments', 'earnings', 'fees']]
+                portfolio_value, cash, payments, earnings, fees = portfolio_metrics.loc[previous_day][
+                    ['portfolio_value', 'cash', 'payments', 'earnings', 'fees']]
                 portfolio_metrics.loc[sale.date, 'cash'] = cash * weekly_risk_free_rate - payments + earnings - fees
                 previous_day = sale.date
 
             else:
-                portfolio_value, cash, payments, earnings = portfolio_metrics.loc[sale.date][['portfolio_value', 'cash', 'payments', 'earnings']]
+                portfolio_value, cash, payments, earnings = portfolio_metrics.loc[sale.date][
+                    ['portfolio_value', 'cash', 'payments', 'earnings']]
 
-            amount = np.floor(cash*sale.allocation / 4 / multiplier ) # 25% at each week
+            amount = np.floor(cash * sale.allocation / 4 / multiplier)  # 25% at each week
             max_amount, max_amount_sale = inc_amount_counter(amount, sale, max_amount, max_amount_sale)
-            portfolio_metrics.loc[sale.date, 'fees']  += min(1, multiplier * sale.commission)
+            portfolio_metrics.loc[sale.date, 'fees'] += min(1, multiplier * sale.commission)
 
-            try: #trying and catching if it fails is faster than checking beforehand, because fails are rate
-                expiry = sale.date + dt.timedelta(days=int(sale.days)) + dt.timedelta(days=6) # adding 6 days so that it ends up on a rebalancing friday
+            try:  # trying and catching if it fails is faster than checking beforehand, because fails are rate
+                expiry = sale.date + dt.timedelta(days=int(sale.days)) + dt.timedelta(
+                    days=6)  # adding 6 days so that it ends up on a rebalancing friday
                 if not expiry > df_final.date.max():
-                    portfolio_metrics.loc[expiry, 'payments'] += multiplier * amount* max(0, sale.strike_price - stockprices.loc[expiry.date(), sale.id])
-                portfolio_metrics.loc[sale.date, 'earnings']  += multiplier * amount* sale.best_bid
+                    portfolio_metrics.loc[expiry, 'payments'] += multiplier * amount * max(0, sale.strike_price -
+                                                                                           stockprices.loc[
+                                                                                               expiry.date(), sale.id])
+                portfolio_metrics.loc[sale.date, 'earnings'] += multiplier * amount * sale.best_bid
             except:
                 # 1997-03-28 was was a good friday holiday:
                 # http://www.cboe.com/aboutcboe/cboe-cbsx-amp-cfe-press-releases?DIR=ACNews&FILE=na321.doc&CreateDate=21.03.1997&Title=CBOE%20announces%20Good%20Friday%20trading%20schedule
                 # we do not have a stockprice for that day, so we pick the closest previous stockprice
                 # the losses will be booked onto the following rebalancing day
                 closest_expiry = expiry
-                #next_rebalancing_day = expiry + dt.timedelta(days=7)
+                # next_rebalancing_day = expiry + dt.timedelta(days=7)
                 next_rebalancing_index = portfolio_metrics.index.get_loc(sale.date) + 1
                 for i in range(10):
                     closest_expiry -= dt.timedelta(days=1)
                     if (stockprices.index == closest_expiry.date()).any():
                         if not expiry > df_final.date.max():
-                            portfolio_metrics.iloc[next_rebalancing_index, payments_column_index] += multiplier * amount * max(0, sale.strike_price - stockprices.loc[ closest_expiry.date(), sale.id])
-                        portfolio_metrics.loc[sale.date, 'earnings'] += multiplier * amount* sale.best_bid
+                            portfolio_metrics.iloc[
+                                next_rebalancing_index, payments_column_index] += multiplier * amount * max(0,
+                                                                                                            sale.strike_price -
+                                                                                                            stockprices.loc[
+                                                                                                                closest_expiry.date(), sale.id])
+                        portfolio_metrics.loc[sale.date, 'earnings'] += multiplier * amount * sale.best_bid
                         break
 
         # not sure which annualization method to use
         returns = portfolio_metrics.cash.pct_change()
-        #annual_return = (1+returns.mean())**len(portfolio_metrics)
-        annual_return = returns.mean()*len(portfolio_metrics)
-        annual_vola = returns.std()*np.sqrt(len(portfolio_metrics))
+        # annual_return = (1+returns.mean())**len(portfolio_metrics)
+        annual_return = returns.mean() * len(portfolio_metrics)
+        annual_vola = returns.std() * np.sqrt(len(portfolio_metrics))
         sharperatio = annual_return / annual_vola
         # portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
 
     except:
         print("Iterating through evaluation crashed on this sale:")
         print(tmp)
-        sharperatio, annual_return, annual_vola =(0,0,0)
-
+        sharperatio, annual_return, annual_vola = (0, 0, 0)
 
     returns = portfolio_metrics.cash.pct_change()
     # annual_return = (1+returns.mean())**len(portfolio_metrics)
     annual_return = returns.mean() * len(portfolio_metrics)
     annual_vola = returns.std() * np.sqrt(len(portfolio_metrics))
     sharperatio = annual_return / annual_vola
-    portfolio_metrics.cash.plot()
 
     return (sharperatio, annual_return, annual_vola, portfolio_metrics, df_final)
 
@@ -994,7 +1015,6 @@ def main():
     counter = 0
     for stockprices, options, FCFF, membership in load_chunked_data():
         print(stockprices.shape)
-
 
         if counter >= 0:
             (metric_of_success1, metric_of_success2) = evaluate_strategy(
