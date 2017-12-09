@@ -467,7 +467,8 @@ def store_options(CRSP_const, prices):
             cur_y = file[year_index + 7:year_index + 7 + 4]
             idx1 = st_y <= cur_y
             idx2 = en_y >= cur_y
-            idx = idx1 & idx2
+            idx3 = data.best_bid > 0
+            idx = idx1 & idx2 & idx3
             const = CRSP_const.loc[idx, :].reset_index(drop=True)
             listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'delta', 'strike_price']],
                              const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
@@ -709,20 +710,12 @@ def get_optionsdata_for_year(year):
 def get_nested_optionsdata_for_year(year):
     return pd.read_pickle(paths['options_pickl_path'][year])
 
-
-def single_run(strike_0=0.9, strike_1=0):
-    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = evaluate_strategy(
-        strike_0=strike_0, stockprices=current_stockprices, FCFF=current_FCFF, VIX=current_VIX, options=options)
-    print(portfolio_sharperatio, portfolio_returns, portfolio_volatility)
-    return (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales)
-
-
 def run_and_store_results():
     '''
     (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = single_run(year=2009)
     portfolio_metrics.cash.plot()
     '''
-    results = {}
+
     results = pd.DataFrame(columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'metrics', 'sales'])
     strike_1 = 0
     for strike_0 in [0.8, 0.9, 1, 1.1, 1.2]:
@@ -898,13 +891,15 @@ def evaluate_strategy(
 
     commissions = df_sorted['best_bid'].apply(lambda x: choose_commission(x)).rename('commission')
     df_final = pd.concat([df_sorted, commissions], axis=1)
+    df_final = df_final.assign(amount=np.nan) # adding column for sale amount - they will be inserted later
+
 
     portfolio_metrics = pd.DataFrame(index=df_final.date.unique(),
                                      columns=['portfolio_value', 'cash', 'earnings', 'payments', 'fees'])
 
     payments_column_index = portfolio_metrics.columns.get_loc('payments')
     cash_column_index = portfolio_metrics.columns.get_loc('cash')
-
+    amount_column_index = df_final.columns.get_loc('amount')
     portfolio_metrics.fillna({'payments': 0, 'earnings': 0, 'fees': 0}, inplace=True)
     # sale = df_final.iloc[0]
     portfolio_metrics.iloc[0, cash_column_index] = initial_cash
@@ -941,6 +936,8 @@ def evaluate_strategy(
                     ['portfolio_value', 'cash', 'payments', 'earnings']]
 
             amount = np.floor(cash * sale.allocation / 4 / multiplier)  # 25% at each week
+
+            df_final.iloc[index, amount_column_index] = amount
             max_amount, max_amount_sale = inc_amount_counter(amount, sale, max_amount, max_amount_sale)
             portfolio_metrics.loc[sale.date, 'fees'] += min(1, multiplier * sale.commission)
 
