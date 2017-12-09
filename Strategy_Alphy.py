@@ -718,6 +718,7 @@ def run_and_store_results():
     portfolio_metrics.cash.plot()
     '''
     results = {}
+    results = pd.DataFrame (columns=['strike_0', 'strike_1', ])
     for strike_0 in [0.8, 0.9, 1, 1.1, 1.2]:
         print(str(strike_0))
         for year in range(1996, 2016):
@@ -743,15 +744,11 @@ def evaluate_strategy(
         quantile=0.1, # lower mean we include fewer stocks
         strike_0=0.9,
         strike_1=0.0,
-        stockprices=None,
-        #options=None,
-        FCFF=None,
-        VIX=None,
         initial_cash = 10**6,
         year=1996,
-        rebalancing_frequency = 4,
         ddwin = 180,
-        multiplier = 100,):
+        multiplier = 100,
+        weekly_risk_free_rate = 1.0,):
 
     # define initial portfolio with cash only
     # loop through all assigned dates
@@ -780,8 +777,23 @@ def evaluate_strategy(
     VIX = current_VIX
     '''
 
-    options_data_year = get_optionsdata_for_year(year)
-    df = options_data_year
+    print('Loading data')
+    all_stockprices, all_prices_raw, all_comp_const, all_CRSP_const, all_VIX, all_FCFF = load_data()
+
+    start_year = 1996
+    end_year = 2016
+    df = pd.DataFrame()
+    for year in range(start_year, end_year): #range(1996, 2016)
+        options_data_year = get_optionsdata_for_year(year)
+        df = df.append(options_data_year)
+
+    print('Preprocessing Data')
+    relevant_days_index = all_stockprices[dt.date(start_year, 1, 1):dt.date(end_year, 1, 1)].index
+    stockprices = all_stockprices.loc[relevant_days_index]
+    FCFF        = all_FCFF.loc[relevant_days_index]
+    VIX         = all_VIX.loc[relevant_days_index]
+
+
     #df = optionsdata_for_year
     # len(df) == 622719
 
@@ -791,12 +803,9 @@ def evaluate_strategy(
     stockprices_filtered = stockprices + FCFF_filtered*0
     target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["Adj Close"], axis="index")
 
-    print("processing options_data")
     #rebalancing-days are only on fridays
     df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
     # len(df_fridays) == 120272
-
-
 
     '''
     on fridays the remaining days will always be one of these values: 8, 15, 22, 29, 36, 43, 50, 57
@@ -817,7 +826,7 @@ def evaluate_strategy(
     #len(df_nice_maturities) == 65736
 
     selected_target_strikes = df_nice_maturities[['date','id']].apply(lambda x: target_strike.loc[x[0].date(),x[1]], axis=1)
-    df_selected = pd.concat([df_fridays, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0:'target_strike'})
+    df_selected = pd.concat([df_nice_maturities, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0:'target_strike'})
     # len(df_selected) == 31461
 
     diffs = np.abs(df_selected.strike_price - df_selected.target_strike)
@@ -866,13 +875,14 @@ def evaluate_strategy(
     df_final = pd.concat([df_sorted, commissions], axis=1)
 
     portfolio_metrics = pd.DataFrame(index=df_final.date.unique(),columns=['portfolio_value', 'cash', 'earnings', 'payments', 'fees' ])
+
     payments_column_index = portfolio_metrics.columns.get_loc('payments')
+    cash_column_index = portfolio_metrics.columns.get_loc('cash')
 
     portfolio_metrics.fillna({'payments':0,'earnings':0,'fees':0}, inplace=True)
     # sale = df_final.iloc[0]
-    portfolio_metrics.iloc[0,1] = initial_cash
+    portfolio_metrics.iloc[0,cash_column_index] = initial_cash
     previous_day = df_final.iloc[0,1] # first day
-    weekly_risk_free_rate = 1.0
     print('Iterating through evaluation')
     #sale = df_final.iloc[200]
     tmp = np.nan
@@ -889,6 +899,7 @@ def evaluate_strategy(
                 max_amount_sale = sale
             amount_counter[amount] = 1
         return max_amount, max_amount_sale
+
     try:
         for index, sale in df_final.iterrows():
             tmp = sale
@@ -931,12 +942,20 @@ def evaluate_strategy(
         annual_return = returns.mean()*len(portfolio_metrics)
         annual_vola = returns.std()*np.sqrt(len(portfolio_metrics))
         sharperatio = annual_return / annual_vola
+        # portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
+
     except:
         print("Iterating through evaluation crashed on this sale:")
         print(tmp)
         sharperatio, annual_return, annual_vola =(0,0,0)
 
-    #portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
+
+    returns = portfolio_metrics.cash.pct_change()
+    # annual_return = (1+returns.mean())**len(portfolio_metrics)
+    annual_return = returns.mean() * len(portfolio_metrics)
+    annual_vola = returns.std() * np.sqrt(len(portfolio_metrics))
+    sharperatio = annual_return / annual_vola
+    portfolio_metrics.cash.plot()
 
     return (sharperatio, annual_return, annual_vola, portfolio_metrics, df_final)
 
