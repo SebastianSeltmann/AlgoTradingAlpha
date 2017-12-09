@@ -608,7 +608,7 @@ def load_data():
     store.close()
     '''
 
-    return prices, prices_raw, comp_const, CRSP_const, vix, FCFF, options
+    return (prices, prices_raw, comp_const, CRSP_const, vix, FCFF, options)
 
 
 def load_chunked_data(chunksize=251):
@@ -718,7 +718,7 @@ def run_and_store_results():
 
     results = pd.DataFrame(columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'metrics', 'sales'])
     strike_1 = 0
-    for strike_0 in [0.8, 0.9, 1, 1.1, 1.2]:
+    for strike_0 in [0.01, 0.9, 1, 1.2, 1.5, 2.0, 9001.0]:
         print(str(strike_0))
         (SR, ret, vol, metrics, sales) = evaluate_strategy(strike_0=strike_0)
         row = {
@@ -816,7 +816,8 @@ def evaluate_strategy(
     '''
 
     print('Loading data')
-    all_stockprices, all_prices_raw, all_comp_const, all_CRSP_const, all_VIX, all_FCFF, all_options = load_data()
+    (all_stockprices, all_prices_raw, all_comp_const, all_CRSP_const, all_VIX, all_FCFF, all_options) = load_data()
+
 
     start_year = 1996
     end_year = 2016
