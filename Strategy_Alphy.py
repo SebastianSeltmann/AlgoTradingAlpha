@@ -684,8 +684,8 @@ def run_and_store_results():
     '''
     (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = single_run(year=2009)
     portfolio_metrics.cash.plot()
+    metrics.cash.plot()
     '''
-
     results = pd.DataFrame(columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'metrics', 'sales'])
     strike_1 = 0
     for strike_0 in [0.01, 0.9, 1, 1.2, 1.5, 2.0, 9001.0]:
@@ -709,6 +709,8 @@ def run_and_store_results():
 
     with open(paths['results'], 'rb') as handle:
         loaded_results = pickle.load(handle)
+
+        loaded_results.loc[0,'metrics'].cash
 
 
 command = "single_run()"
@@ -745,6 +747,7 @@ def evaluate_strategy(
     strike_0=0.9
     strike_1=0.0
     multiplier = 100
+    weekly_risk_free_rate=1.0
     day = dt.date(2005, 2, 4)
     stock = 11850.0
     stockprices = current_stockprices
@@ -756,8 +759,8 @@ def evaluate_strategy(
     (all_stockprices, all_prices_raw, all_comp_const, all_CRSP_const, all_VIX, all_FCFF, all_options) = load_data()
 
 
-    start_year = 2002
-    end_year = 2003
+    start_year = 1996
+    end_year = 2016
     print('Preprocessing Data')
     relevant_days_index = all_stockprices[dt.date(start_year, 1, 1):dt.date(end_year, 1, 1)].index
     stockprices = all_stockprices.loc[relevant_days_index]
@@ -838,7 +841,7 @@ def evaluate_strategy(
     payments_column_index = portfolio_metrics.columns.get_loc('payments')
     cash_column_index = portfolio_metrics.columns.get_loc('cash')
     amount_column_index = df_final.columns.get_loc('amount')
-    portfolio_metrics.fillna({'payments': 0, 'earnings': 0, 'fees': 0}, inplace=True)
+    portfolio_metrics.fillna({'payments': 0, 'earnings': 0, 'fees': 0, 'margin_required': 0}, inplace=True)
     # sale = df_final.iloc[0]
     portfolio_metrics.iloc[0, cash_column_index] = initial_cash
     previous_day = df_final.iloc[0, 1]  # first day
@@ -888,13 +891,13 @@ def evaluate_strategy(
                     (10% * Strike Price)
                 )
             '''
-            margin_required = sale.best_bid + max(0.2*stockprices.loc[sale.date.date(), sale.id] - (sale.best_bid - sale.strike_price), 0.1*sale.strike_price)
+            margin_required = amount * multiplier *  (sale.best_bid + max(0.2*stockprices.loc[sale.date.date(), sale.id] - (sale.best_bid - sale.strike_price), 0.1*sale.strike_price))
 
 
             try:  # trying and catching if it fails is faster than checking beforehand, because fails are rate
                 expiry = sale.date + dt.timedelta(days=int(sale.days)) + dt.timedelta(
                     days=6)  # adding 6 days so that it ends up on a rebalancing friday
-                portfolio_metrics.loc[(portfolio_metrics.index >= sale.date) & (portfolio_metrics.index <= expiry), 'fees'] += margin_required
+                portfolio_metrics.loc[(portfolio_metrics.index >= sale.date) & (portfolio_metrics.index <= expiry), 'margin_required'] += margin_required
 
                 if not expiry > df_final.date.max():
                     portfolio_metrics.loc[expiry, 'payments'] += multiplier * amount * max(0, sale.strike_price -
