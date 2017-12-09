@@ -688,7 +688,7 @@ def run_and_store_results():
     '''
     results = pd.DataFrame(columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'metrics', 'sales'])
     strike_1 = 0
-    for strike_0 in [0.01, 0.9, 1, 1.2, 1.5, 2.0, 9001.0]:
+    for strike_0 in [0.01, 0.8, 0.9, 1, 1.1, 1.2, 9001.0]:
         print(str(strike_0))
         (SR, ret, vol, metrics, sales) = evaluate_strategy(strike_0=strike_0)
         row = {
@@ -710,7 +710,8 @@ def run_and_store_results():
     with open(paths['results'], 'rb') as handle:
         loaded_results = pickle.load(handle)
 
-        loaded_results.loc[0,'metrics'].cash
+        loaded_results.loc[0,'metrics'].cash.plot()
+        loaded_results.loc[0,'metrics'].margin_required.plot()
 
 
 command = "single_run()"
@@ -766,7 +767,7 @@ def evaluate_strategy(
     stockprices = all_stockprices.loc[relevant_days_index]
     FCFF = all_FCFF.loc[relevant_days_index]
     VIX = all_VIX.loc[relevant_days_index]
-    df_options = all_options.loc[all_options.date.dt.year == start_year]
+    df_options = all_options.loc[(all_options.date.dt.year >= start_year & (all_options.date.dt.year < end_year))]
     # df = optionsdata_for_year
     # len(df) == 622719
 
@@ -891,7 +892,7 @@ def evaluate_strategy(
                     (10% * Strike Price)
                 )
             '''
-            margin_required = amount * multiplier *  (sale.best_bid + max(0.2*stockprices.loc[sale.date.date(), sale.id] - (sale.best_bid - sale.strike_price), 0.1*sale.strike_price))
+            margin_required = amount * multiplier *  (sale.best_bid + max(0.2*stockprices.loc[sale.date.date(), sale.id] - (stockprices.loc[sale.date.date(), sale.id] - sale.strike_price), 0.1*sale.strike_price))
 
 
             try:  # trying and catching if it fails is faster than checking beforehand, because fails are rate
