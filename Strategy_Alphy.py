@@ -895,7 +895,7 @@ def evaluate_strategy(
 
 
     portfolio_metrics = pd.DataFrame(index=df_final.date.unique(),
-                                     columns=['portfolio_value', 'cash', 'earnings', 'payments', 'fees'])
+                                     columns=['portfolio_value', 'cash', 'earnings', 'payments', 'fees', 'margin_required'])
 
     payments_column_index = portfolio_metrics.columns.get_loc('payments')
     cash_column_index = portfolio_metrics.columns.get_loc('cash')
@@ -940,10 +940,24 @@ def evaluate_strategy(
             df_final.iloc[index, amount_column_index] = amount
             max_amount, max_amount_sale = inc_amount_counter(amount, sale, max_amount, max_amount_sale)
             portfolio_metrics.loc[sale.date, 'fees'] += min(1, multiplier * sale.commission)
+            '''
+            https://www.interactivebrokers.com/en/index.php?f=26660&hm=us&ex=us&rgt=1&rsk=0&pm=1&ot=0&rst=1|0|1|0|1|0|1|0|0|1|0|0|1|0|1|0|1|0|0|0|1|0|0|0|1|0|0|0|0|0|0|1|0|0|0|1
+            Interactive Brokers Stock Options Margin:
+                Put Price
+                +
+                Maximum (
+                    (20% * Underlying Price - Out of the Money Amount),
+                    (10% * Strike Price)
+                )
+            '''
+            margin_required = sale.best_bid + max(0.2*stockprices.loc[sale.date.date(), sale.id] - (sale.best_bid - sale.strike_price), 0.1*sale.strike_price)
+
 
             try:  # trying and catching if it fails is faster than checking beforehand, because fails are rate
                 expiry = sale.date + dt.timedelta(days=int(sale.days)) + dt.timedelta(
                     days=6)  # adding 6 days so that it ends up on a rebalancing friday
+                portfolio_metrics.loc[(portfolio_metrics.index >= sale.date) & (portfolio_metrics.index <= expiry), 'fees'] += margin_required
+
                 if not expiry > df_final.date.max():
                     portfolio_metrics.loc[expiry, 'payments'] += multiplier * amount * max(0, sale.strike_price -
                                                                                            stockprices.loc[
