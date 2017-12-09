@@ -54,6 +54,7 @@ paths['all_options_csv']            = rootpath + "all_options.csv"
 paths['all_options_h5']             = rootpath + "all_options.h5"
 paths['all_options2_h5']            = rootpath + "all_options2.h5"
 paths['all_options3_h5']            = rootpath + "all_options3.h5"
+paths['preprocessed_options']       = rootpath + "preprocessed_options.5"
 paths['options_nested_df']          = rootpath + "options_nested_df.h5"
 paths['profiler']                   = rootpath + "profile_data"
 paths['results']                    = rootpath + "results.pkl"
@@ -596,6 +597,11 @@ def load_data():
     store = pd.HDFStore(paths['Linkage.h5'])
     linkage = store['Linkage']
     store.close()
+
+    store = pd.HDFStore(paths['preprocessed_options'])
+    options = store['preprocessed_options']
+    store.close()
+
     '''
     # Options data sourcing (test)
     store = pd.HDFStore(paths['all_options_h5'])
@@ -603,7 +609,7 @@ def load_data():
     store.close()
     '''
 
-    return prices, prices_raw, comp_const, CRSP_const, vix, FCFF
+    return prices, prices_raw, comp_const, CRSP_const, vix, FCFF, options
 
 def load_chunked_data(chunksize=251):
     reader_stockprices      = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
@@ -702,13 +708,13 @@ def get_nested_optionsdata_for_year(year):
 
 def single_run(year=2014, strike_0 = 0.9):
     print("loading general data for " + str(year))
-    stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
+    stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF, options = load_data()
     relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
     current_stockprices = stockprices.loc[relevant_days_index]
     current_FCFF        = FCFF.loc[relevant_days_index]
     current_VIX         = VIX.loc[relevant_days_index]
 
-    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = evaluate_strategy( strike_0= strike_0, stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, year = year )
+    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = evaluate_strategy( strike_0= strike_0, stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, options = options )
     print(portfolio_sharperatio, portfolio_returns, portfolio_volatility)
     return(portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales)
 
@@ -718,15 +724,13 @@ def run_and_store_results():
     portfolio_metrics.cash.plot()
     '''
     results = {}
-    results = pd.DataFrame (columns=['strike_0', 'strike_1', ])
+    results = pd.DataFrame (columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'metrics', 'sales'])
+    strike_1 = 0
     for strike_0 in [0.8, 0.9, 1, 1.1, 1.2]:
         print(str(strike_0))
-        for year in range(1996, 2016):
-            results[strike_0, year] = single_run(year, strike_0)
-
-    for year, tuple in results.items():
-        SR, ret, vol, metrics, sales = tuple
-        print('%4d: %2.2f %2.2f %2.2f' % (year, SR, ret, vol))
+        results.append(single_run(strike_0 = strike_0, strike_1 = strike_1))
+        #for year in range(1996, 2016):
+        #    # results[strike_0, year] = single_run(year= year, strike_0 = strike_0, strike_1 = strike_1)
 
     with open(paths['results'], 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -734,19 +738,54 @@ def run_and_store_results():
     with open(paths['results'], 'rb') as handle:
         loaded_results = pickle.load(handle)
 
+    for year, tuple in results.items():
+        SR, ret, vol, metrics, sales = tuple
+        print('%4d: %2.2f %2.2f %2.2f' % (year, SR, ret, vol))
 
 
 command="single_run()"
 command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )"
 # run_profiler(command)
+
+def preprocess_options_data():
+    start_year = 1996
+    end_year = 2016
+    df = pd.DataFrame()
+    for year in range(start_year, end_year): #range(1996, 2016)
+        options_data_year = get_optionsdata_for_year(year)
+        df = df.append(options_data_year)
+
+    df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
+    df_nice_maturities = df_fridays[df_fridays['days'].isin([29,22,43,36])]
+    #if len(df_nice_maturities) == 0:
+    print("fixing")
+    '''
+    on fridays the remaining days will always be one of these values: 8, 15, 22, 29, 36, 43, 50, 57
+    this was true for all 1996 and 1997, so I assume it is true for all years
+    on any given friday, two of these maturities will be available for selling, and these two are 28 days apart
+    that makes filtering for just the ones we want to invest in straightforward
+    29,22,43,36
+    '''
+    to_be_replaced = [6, 7, 8, 13, 14, 15, 20, 21, 27, 28, 34, 35, 41, 42, 48, 49, 56]
+    replacements   = [8, 8, 8, 15, 15, 15, 22, 22, 29, 29, 36, 36, 43, 43, 50, 50, 57]
+    df_fridays['days'].replace(to_be_replaced,replacements, inplace=True)
+    df_nice_maturities = df_fridays[df_fridays['days'].isin([29,22,43,36])]
+    print("fixed")
+
+    store = pd.HDFStore(paths['preprocessed_options'])
+    store['preprocessed_options'] = df_nice_maturities
+    store.close()
+
+
+def load_preprocessed_options_data():
+
+
 def evaluate_strategy(
         coverage=1,
         quantile=0.1, # lower mean we include fewer stocks
         strike_0=0.9,
         strike_1=0.0,
         initial_cash = 10**6,
-        year=1996,
-        ddwin = 180,
         multiplier = 100,
         weekly_risk_free_rate = 1.0,):
 
@@ -778,21 +817,15 @@ def evaluate_strategy(
     '''
 
     print('Loading data')
-    all_stockprices, all_prices_raw, all_comp_const, all_CRSP_const, all_VIX, all_FCFF = load_data()
+    all_stockprices, all_prices_raw, all_comp_const, all_CRSP_const, all_VIX, all_FCFF, all_options = load_data()
 
     start_year = 1996
     end_year = 2016
-    df = pd.DataFrame()
-    for year in range(start_year, end_year): #range(1996, 2016)
-        options_data_year = get_optionsdata_for_year(year)
-        df = df.append(options_data_year)
-
     print('Preprocessing Data')
     relevant_days_index = all_stockprices[dt.date(start_year, 1, 1):dt.date(end_year, 1, 1)].index
     stockprices = all_stockprices.loc[relevant_days_index]
     FCFF        = all_FCFF.loc[relevant_days_index]
     VIX         = all_VIX.loc[relevant_days_index]
-
 
     #df = optionsdata_for_year
     # len(df) == 622719
@@ -803,30 +836,10 @@ def evaluate_strategy(
     stockprices_filtered = stockprices + FCFF_filtered*0
     target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["Adj Close"], axis="index")
 
-    #rebalancing-days are only on fridays
-    df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
-    # len(df_fridays) == 120272
-
-    '''
-    on fridays the remaining days will always be one of these values: 8, 15, 22, 29, 36, 43, 50, 57
-    this was true for all 1996 and 1997, so I assume it is true for all years
-    on any given friday, two of these maturities will be available for selling, and these two are 28 days apart
-    that makes filtering for just the ones we want to invest in straightforward
-    29,22,43,36
-    '''
-    df_nice_maturities = df_fridays[df_fridays['days'].isin([29,22,43,36])]
-    if len(df_nice_maturities) == 0:
-        print("fixing")
-        to_be_replaced = [6, 7, 8, 13, 14, 15, 20, 21, 27, 28, 34, 35, 41, 42, 48, 49, 56]
-        replacements   = [8, 8, 8, 15, 15, 15, 22, 22, 29, 29, 36, 36, 43, 43, 50, 50, 57]
-        df_fridays['days'].replace(to_be_replaced,replacements, inplace=True)
-        df_nice_maturities = df_fridays[df_fridays['days'].isin([29,22,43,36])]
-        print("fixed")
-
     #len(df_nice_maturities) == 65736
 
-    selected_target_strikes = df_nice_maturities[['date','id']].apply(lambda x: target_strike.loc[x[0].date(),x[1]], axis=1)
-    df_selected = pd.concat([df_nice_maturities, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0:'target_strike'})
+    selected_target_strikes = all_options[['date','id']].apply(lambda x: target_strike.loc[x[0].date(),x[1]], axis=1)
+    df_selected = pd.concat([all_options, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0:'target_strike'})
     # len(df_selected) == 31461
 
     diffs = np.abs(df_selected.strike_price - df_selected.target_strike)
