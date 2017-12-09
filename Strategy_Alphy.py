@@ -541,12 +541,8 @@ def store_options_as_nested_df(CRSP_const, prices):
 
 command = 'load_data()'
 command = 'store_options_as_nested_df(CRSP_const, prices)'
-
 command = 'laufen()'
-
-
 def run_profiler(command):
-    # prices, prices_raw, comp_const, CRSP_const, vix, FCFF = load_data()
     print('Profiler Running')
     cProfile.run(command, filename=paths['profiler'])
     p = pstats.Stats(paths['profiler'])
@@ -600,7 +596,6 @@ def load_data():
     store = pd.HDFStore(paths['preprocessed_options'])
     options = store['preprocessed_options']
     store.close()
-
     '''
     # Options data sourcing (test)
     store = pd.HDFStore(paths['all_options_h5'])
@@ -819,14 +814,14 @@ def evaluate_strategy(
     (all_stockprices, all_prices_raw, all_comp_const, all_CRSP_const, all_VIX, all_FCFF, all_options) = load_data()
 
 
-    start_year = 1996
-    end_year = 2016
+    start_year = 2002
+    end_year = 2003
     print('Preprocessing Data')
     relevant_days_index = all_stockprices[dt.date(start_year, 1, 1):dt.date(end_year, 1, 1)].index
     stockprices = all_stockprices.loc[relevant_days_index]
     FCFF = all_FCFF.loc[relevant_days_index]
     VIX = all_VIX.loc[relevant_days_index]
-
+    df_options = all_options.loc[all_options.date.dt.year == start_year]
     # df = optionsdata_for_year
     # len(df) == 622719
 
@@ -838,9 +833,8 @@ def evaluate_strategy(
 
     # len(df_nice_maturities) == 65736
 
-    selected_target_strikes = all_options[['date', 'id']].apply(lambda x: target_strike.loc[x[0].date(), x[1]], axis=1)
-    df_selected = pd.concat([all_options, selected_target_strikes], axis=1).dropna(axis=0).rename(
-        columns={0: 'target_strike'})
+    selected_target_strikes = df_options[['date', 'id']].apply(lambda x: target_strike.loc[x[0].date(), x[1]], axis=1)
+    df_selected = pd.concat([df_options, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0: 'target_strike'})
     # len(df_selected) == 31461
 
     diffs = np.abs(df_selected.strike_price - df_selected.target_strike)
@@ -866,17 +860,19 @@ def evaluate_strategy(
     df_risky = pd.concat([df_best, df_best.delta * df_best.impl_volatility], axis=1).rename(columns={0: 'risk'})
 
     risk_dict = {}
-
-    def get_total_risk_for_date(date):
-        if not (date) in risk_dict:
-            total_risk = df_risky[df_best.date == date].risk.sum()
-            risk_dict[date] = total_risk
+    def get_weight(risk, date):
+        if not (risk, date) in risk_dict:
+            risks = df_risky[df_best.date == date].risk
+            total_risk = risks.sum()
+            total_weight = (total_risk / risks).sum()
+            risk_dict[risk, date] = total_risk, total_weight
         else:
-            total_risk = risk_dict[date]
-        return total_risk
+            (total_risk, total_weight) = risk_dict[risk, date]
+        total_risk_weight = (total_risk / risks ).sum()
+        weight = (total_risk / risk) / total_risk_weight
+        return weight
 
-    allocation = df_risky[['risk', 'date', 'id']].apply(
-        lambda x: x[0] / get_total_risk_for_date(x[1]) / stockprices.loc[x[1].date(), x[2]] / coverage, axis=1)
+    allocation = df_risky[['risk', 'date', 'id']].apply( lambda x: get_weight(x[0], x[1]) / stockprices.loc[x[1].date(), x[2]] / coverage, axis=1)
     df_allocated = pd.concat([df_risky, allocation], axis=1).rename(columns={0: 'allocation'})
     df_sorted = df_allocated.sort_values(by=['date'])
 
