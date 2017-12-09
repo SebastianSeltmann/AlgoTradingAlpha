@@ -700,7 +700,7 @@ def get_optionsdata_for_year(year):
 def get_nested_optionsdata_for_year(year):
     return pd.read_pickle(paths['options_pickl_path'][year])
 
-def single_run(year=2014):
+def single_run(year=2014, strike_0 = 0.9):
     print("loading general data for " + str(year))
     stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
     relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
@@ -708,7 +708,7 @@ def single_run(year=2014):
     current_FCFF        = FCFF.loc[relevant_days_index]
     current_VIX         = VIX.loc[relevant_days_index]
 
-    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, year = year )
+    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = evaluate_strategy( strike_0= strike_0, stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX, year = year )
     print(portfolio_sharperatio, portfolio_returns, portfolio_volatility)
     return(portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales)
 
@@ -718,8 +718,14 @@ def run_and_store_results():
     portfolio_metrics.cash.plot()
     '''
     results = {}
-    for year in range(1996, 2016):
-        results[year] = single_run(year)
+    for strike_0 in [0.8, 0.9, 1, 1.1, 1.2]:
+        print(str(strike_0))
+        for year in range(1996, 2016):
+            results[strike_0, year] = single_run(year, strike_0)
+
+    for year, tuple in results.items():
+        SR, ret, vol, metrics, sales = tuple
+        print('%4d: %2.2f %2.2f %2.2f' % (year, SR, ret, vol))
 
     with open(paths['results'], 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -727,9 +733,6 @@ def run_and_store_results():
     with open(paths['results'], 'rb') as handle:
         loaded_results = pickle.load(handle)
 
-    for year, tuple in results.items():
-        SR, ret, vol, metrics, sales = tuple
-        print('%4d: %2.2f %2.2f %2.2f' % (year, SR, ret, vol))
 
 
 command="single_run()"
