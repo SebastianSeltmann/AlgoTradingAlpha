@@ -470,8 +470,9 @@ def store_options(CRSP_const, prices):
             idx3 = data.best_bid > 0
             idx = idx1 & idx2 & idx3
             const = CRSP_const.loc[idx, :].reset_index(drop=True)
-            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'impl_volatility', 'delta', 'strike_price']],
+            listO = pd.merge(data[['id', 'date', 'days', 'best_offer', 'impl_volatility', 'delta', 'strike_price']],
                              const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
+            listO.rename(index=str, columns={"best_offer": "best_bid"}, inplace=True)
             listO['date'] = pd.to_datetime(listO['date'], format='%d%b%Y')
             idx3 = listO['delta'] < 0
             listO = listO.loc[idx3, :]
@@ -480,9 +481,6 @@ def store_options(CRSP_const, prices):
             store = pd.HDFStore(paths['all_options_h5'])
             store.append('options' + cur_y, listO, index=False, data_columns=True)
             store.close()
-
-
-            ##
 
 
 def preprocess_options_data():
@@ -514,9 +512,12 @@ def preprocess_options_data():
     store['preprocessed_options'] = df_nice_maturities
     store.close()
 
+
 command = 'load_data()'
 command = 'store_options_as_nested_df(CRSP_const, prices)'
 command = 'laufen()'
+
+
 def run_profiler(command):
     print('Profiler Running')
     cProfile.run(command, filename=paths['profiler'])
@@ -576,6 +577,23 @@ def load_data():
     store = pd.HDFStore(paths['all_options_h5'])
     x = store['options1996']
     store.close()
+
+    store = pd.HDFStore(paths['Fundamentals.h5'])
+    market_value = store['Market Value - Total']
+    debt = store['Long-Term Debt - Total']
+    store.close()
+
+    store.keys()
+
+    market_value = market_value.applymap(lambda x: np.nan if x == 0 else x)
+    market_value.dropna(how='all')
+    market_value.dropna(how='all').dropna(how='all',axis=1)
+    debt
+    debt.dropna(how='all')
+
+    FCFF.dropna(how='all')
+
+
     '''
 
     return (prices, prices_raw, comp_const, CRSP_const, vix, FCFF, options)
@@ -680,25 +698,27 @@ def get_optionsdata_for_year(year):
 def get_nested_optionsdata_for_year(year):
     return pd.read_pickle(paths['options_pickl_path'][year])
 
+
 def run_and_store_results():
     '''
     (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = single_run(year=2009)
     portfolio_metrics.cash.plot()
     metrics.cash.plot()
     '''
-    results = pd.DataFrame(columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'metrics', 'sales'])
+    results = pd.DataFrame(columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'MDD', 'metrics', 'sales'])
     strike_1 = 0
     for strike_0 in [0.01, 0.8, 0.9, 1, 1.1, 1.2, 9001.0]:
         print(str(strike_0))
-        (SR, ret, vol, metrics, sales) = evaluate_strategy(strike_0=strike_0)
+        (SR, ret, vol, MDD, metrics, sales) = evaluate_strategy(strike_0=strike_0)
         row = {
             'strike_0': strike_0,
-            'strike_1':strike_1,
-            'SR':SR,
-            'ret':ret,
-            'vol':vol,
-            'metrics':metrics,
-            'sales':sales
+            'strike_1': strike_1,
+            'SR': SR,
+            'ret': ret,
+            'MDD': MDD,
+            'vol': vol,
+            'metrics': metrics,
+            'sales': sales
         }
         results = results.append(row, ignore_index=True)
         # for year in range(1996, 2016):
@@ -710,24 +730,43 @@ def run_and_store_results():
     with open(paths['results'], 'rb') as handle:
         loaded_results = pickle.load(handle)
 
-        loaded_results.loc[0,'metrics'].cash.plot()
-        loaded_results.loc[0,'metrics'].margin_required.plot()
+        loaded_results.loc[0, 'metrics'].columns
+        metrics = loaded_results.loc[0, 'metrics'][['cash', 'earnings', 'payments', 'fees']]
+        loaded_results.loc[0, 'metrics'].cash.plot()
+        loaded_results.loc[0, 'metrics'].earnings.plot()
+        loaded_results.loc[0, 'metrics'].margin_required.plot()
+        earnings = loaded_results.loc[0, 'metrics'].earnings
+        cost = loaded_results.loc[0, 'metrics'].payments + loaded_results.loc[0, 'metrics'].fees
+        cost.plot()
+        earnings.plot()
+
+        temp = loaded_results.loc[0, 'metrics'].earnings
+        temp.plot()
+        sales = loaded_results.loc[0, 'sales']
+        sales[sales.date == dt.date(2008, 10, 24)].sort_values(by=['amount'])
+        sales.loc[1629307].id
+        stockprices[sales.loc[1629307].id].iloc[3200:3300].plot()
+        stockprices.index
 
 
 command = "single_run()"
 command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )"
 
+sales
+
 
 # run_profiler(command)
 
 def evaluate_strategy(
-        coverage=1,
+        coverage=0.5,
         quantile=0.1,  # lower mean we include fewer stocks
         strike_0=0.9,
         strike_1=0.0,
         initial_cash=10 ** 6,
         multiplier=100,
-        weekly_risk_free_rate=1.0, ):
+        weekly_risk_free_rate=1.0,
+        ddwin=252,
+        inverter=1, ):
     # define initial portfolio with cash only
     # loop through all assigned dates
     # determine overall success after all time
@@ -748,6 +787,8 @@ def evaluate_strategy(
     strike_0=0.9
     strike_1=0.0
     multiplier = 100
+    ddwin=252
+    inverter=1
     weekly_risk_free_rate=1.0
     day = dt.date(2005, 2, 4)
     stock = 11850.0
@@ -759,7 +800,6 @@ def evaluate_strategy(
     print('Loading data')
     (all_stockprices, all_prices_raw, all_comp_const, all_CRSP_const, all_VIX, all_FCFF, all_options) = load_data()
 
-
     start_year = 1996
     end_year = 2016
     print('Preprocessing Data')
@@ -767,7 +807,7 @@ def evaluate_strategy(
     stockprices = all_stockprices.loc[relevant_days_index]
     FCFF = all_FCFF.loc[relevant_days_index]
     VIX = all_VIX.loc[relevant_days_index]
-    df_options = all_options.loc[(all_options.date.dt.year >= start_year & (all_options.date.dt.year < end_year))]
+    df_options = all_options.loc[(all_options.date.dt.year >= start_year) & (all_options.date.dt.year < end_year)]
     # df = optionsdata_for_year
     # len(df) == 622719
 
@@ -775,12 +815,14 @@ def evaluate_strategy(
     # keeping only the top q quantile
     FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(1 - quantile, axis=1))]
     stockprices_filtered = stockprices + FCFF_filtered * 0
+    # stockprices_filtered = stockprices
     target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["Adj Close"], axis="index")
 
     # len(df_nice_maturities) == 65736
 
     selected_target_strikes = df_options[['date', 'id']].apply(lambda x: target_strike.loc[x[0].date(), x[1]], axis=1)
-    df_selected = pd.concat([df_options, selected_target_strikes], axis=1).dropna(axis=0).rename(columns={0: 'target_strike'})
+    df_selected = pd.concat([df_options, selected_target_strikes], axis=1).dropna(axis=0).rename(
+        columns={0: 'target_strike'})
     # len(df_selected) == 31461
 
     diffs = np.abs(df_selected.strike_price - df_selected.target_strike)
@@ -797,8 +839,15 @@ def evaluate_strategy(
             min_diff = min_dict[(date, id)]
         return min_diff
 
-    is_best_fit = df_with_diff[['date', 'id', 'abs_difference']].apply(lambda x: get_min_diff(x[0], x[1]) == x[2],
-                                                                       axis=1)
+    def get_min_delta_diff(date,id):
+        if not (date, id) in min_dict:
+            min_diff = abs(df_with_diff[(df_with_diff.date == date) & (df_with_diff.id == id)].delta+0.5).min()
+            min_dict[(date, id)] = min_diff
+        else:
+            min_diff = min_dict[(date, id)]
+        return min_diff
+    #is_best_fit = df_with_diff[['date', 'id', 'abs_difference']].apply(lambda x: get_min_diff(x[0], x[1]) == x[2], axis=1)
+    is_best_fit = df_with_diff[['date', 'id', 'delta']].apply(lambda x: get_min_delta_diff(x[0], x[1]) == abs(x[2]+0.5),axis=1)
 
     df_best = df_with_diff[is_best_fit]
     # len(df_best) == 9907
@@ -806,6 +855,7 @@ def evaluate_strategy(
     df_risky = pd.concat([df_best, df_best.delta * df_best.impl_volatility], axis=1).rename(columns={0: 'risk'})
 
     risk_dict = {}
+
     def get_weight(risk, date):
         if not (risk, date) in risk_dict:
             risks = df_risky[df_best.date == date].risk
@@ -817,7 +867,19 @@ def evaluate_strategy(
         weight = (total_risk / risk) / total_weight
         return weight
 
-    allocation = df_risky[['risk', 'date', 'id']].apply( lambda x: get_weight(x[0], x[1]) / stockprices.loc[x[1].date(), x[2]] / coverage, axis=1)
+    def get_weird_weight(risk, date):
+        if not (date) in risk_dict:
+            risks = df_risky[df_best.date == date].risk
+            total_risk = risks.sum()
+            risk_dict[date] = total_risk
+        else:
+            total_risk = risk_dict[date]
+        weight = risk / total_risk
+        return weight
+
+    get_chosen_weight = get_weight
+    allocation = df_risky[['risk', 'date', 'id']].apply(
+        lambda x: get_chosen_weight(x[0], x[1]) / stockprices.loc[x[1].date(), x[2]] / coverage, axis=1)
     df_allocated = pd.concat([df_risky, allocation], axis=1).rename(columns={0: 'allocation'})
     df_sorted = df_allocated.sort_values(by=['date'])
 
@@ -833,14 +895,18 @@ def evaluate_strategy(
 
     commissions = df_sorted['best_bid'].apply(lambda x: choose_commission(x)).rename('commission')
     df_final = pd.concat([df_sorted, commissions], axis=1)
-    df_final = df_final.assign(amount=np.nan) # adding column for sale amount - they will be inserted later
-
+    df_final = df_final.assign(amount=np.nan)  # adding column for sale amount - they will be inserted later
+    df_final = df_final.assign(stockprice_now=np.nan)
+    df_final = df_final.assign(stockprice_at_expiry=np.nan)
 
     portfolio_metrics = pd.DataFrame(index=df_final.date.unique(),
-                                     columns=['portfolio_value', 'cash', 'earnings', 'payments', 'fees', 'margin_required'])
+                                     columns=['portfolio_value', 'cash', 'earnings', 'payments', 'fees',
+                                              'margin_required'])
 
     payments_column_index = portfolio_metrics.columns.get_loc('payments')
     cash_column_index = portfolio_metrics.columns.get_loc('cash')
+    earnings_column_index = portfolio_metrics.columns.get_loc('earnings')
+
     amount_column_index = df_final.columns.get_loc('amount')
     portfolio_metrics.fillna({'payments': 0, 'earnings': 0, 'fees': 0, 'margin_required': 0}, inplace=True)
     # sale = df_final.iloc[0]
@@ -864,9 +930,32 @@ def evaluate_strategy(
             amount_counter[amount] = 1
         return max_amount, max_amount_sale
 
+    deal_counter = {
+        'win': 0,
+        'loss': 0,
+        'zero': 0
+    }
+    '''
+    # Current Run: LongPosition-WWA-CappedAmounts
+
+    portfolio_metrics[:30]
+    portfolio_metrics.cash.plot()
+    portfolio_metrics.margin_required.plot()
+    portfolio_metrics.columns
+    portfolio_metrics.earnings.cumsum().plot()
+    portfolio_metrics.payments.cumsum().plot()
+    df2 = df[(df.strike_price > df.stockprice_at_expiry)]
+    ((df2.strike_price - df2.stockprice_at_expiry)*df2.amount).sum()*multiplier
+    ((df.best_bid*df.amount)*multiplier).sum()
+
+    df.columns
+    '''
+
     try:
+        i = 0
         for index, sale in df_final.iterrows():
             tmp = sale
+
             if previous_day != sale.date:
                 portfolio_value, cash, payments, earnings, fees = portfolio_metrics.loc[previous_day][
                     ['portfolio_value', 'cash', 'payments', 'earnings', 'fees']]
@@ -877,11 +966,19 @@ def evaluate_strategy(
                 portfolio_value, cash, payments, earnings = portfolio_metrics.loc[sale.date][
                     ['portfolio_value', 'cash', 'payments', 'earnings']]
 
-            amount = np.floor(cash * sale.allocation / 4 / multiplier)  # 25% at each week
-
+            # 25% at each week
+            # amount = np.floor(cash * sale.allocation / 4 / multiplier)
+            # amount = np.round(cash * sale.allocation / 4 / multiplier) * inverter
+            amount = np.round(cash / (50 * 4 * multiplier * stockprices.loc[sale.date.date(), sale.id])) * inverter
+            amount = min(amount, 20)
+            '''
+            if amount > 0:
+                break
+            '''
             df_final.loc[index, 'amount'] = amount
             max_amount, max_amount_sale = inc_amount_counter(amount, sale, max_amount, max_amount_sale)
-            portfolio_metrics.loc[sale.date, 'fees'] += min(1, multiplier * sale.commission)
+            if amount > 0:
+                portfolio_metrics.loc[sale.date, 'fees'] += min(1, multiplier * sale.commission)
             '''
             https://www.interactivebrokers.com/en/index.php?f=26660&hm=us&ex=us&rgt=1&rsk=0&pm=1&ot=0&rst=1|0|1|0|1|0|1|0|0|1|0|0|1|0|1|0|1|0|0|0|1|0|0|0|1|0|0|0|0|0|0|1|0|0|0|1
             Interactive Brokers Stock Options Margin:
@@ -892,19 +989,36 @@ def evaluate_strategy(
                     (10% * Strike Price)
                 )
             '''
-            margin_required = amount * multiplier *  (sale.best_bid + max(0.2*stockprices.loc[sale.date.date(), sale.id] - (stockprices.loc[sale.date.date(), sale.id] - sale.strike_price), 0.1*sale.strike_price))
-
+            margin_required = amount * multiplier * (sale.best_bid + max(
+                0.2 * stockprices.loc[sale.date.date(), sale.id] - (
+                stockprices.loc[sale.date.date(), sale.id] - sale.strike_price), 0.1 * sale.strike_price))
 
             try:  # trying and catching if it fails is faster than checking beforehand, because fails are rate
                 expiry = sale.date + dt.timedelta(days=int(sale.days)) + dt.timedelta(
                     days=6)  # adding 6 days so that it ends up on a rebalancing friday
-                portfolio_metrics.loc[(portfolio_metrics.index >= sale.date) & (portfolio_metrics.index <= expiry), 'margin_required'] += margin_required
+                portfolio_metrics.loc[(portfolio_metrics.index >= sale.date) & (
+                portfolio_metrics.index <= expiry), 'margin_required'] += margin_required
+
+                earnings = multiplier * amount * sale.best_bid
+                losses = multiplier * amount * max(0, sale.strike_price - stockprices.loc[expiry.date(), sale.id])
+                df_final.loc[index, 'stockprice_now'] = stockprices.loc[sale.date.date(), sale.id]
+                if earnings < losses:
+                    deal_counter['loss'] += 1
+                    i += 1
+                    if i >= 10:
+                        pass  # break
+
+                elif earnings > losses:
+                    deal_counter['win'] += 1
+                else:
+                    deal_counter['zero'] += 1
 
                 if not expiry > df_final.date.max():
                     portfolio_metrics.loc[expiry, 'payments'] += multiplier * amount * max(0, sale.strike_price -
                                                                                            stockprices.loc[
                                                                                                expiry.date(), sale.id])
-                portfolio_metrics.loc[sale.date, 'earnings'] += multiplier * amount * sale.best_bid
+                    portfolio_metrics.loc[expiry, 'earnings'] += multiplier * amount * sale.best_bid
+                df_final.loc[index, 'stockprice_at_expiry'] = stockprices.loc[expiry.date(), sale.id]
             except:
                 # 1997-03-28 was was a good friday holiday:
                 # http://www.cboe.com/aboutcboe/cboe-cbsx-amp-cfe-press-releases?DIR=ACNews&FILE=na321.doc&CreateDate=21.03.1997&Title=CBOE%20announces%20Good%20Friday%20trading%20schedule
@@ -912,7 +1026,7 @@ def evaluate_strategy(
                 # the losses will be booked onto the following rebalancing day
                 closest_expiry = expiry
                 # next_rebalancing_day = expiry + dt.timedelta(days=7)
-                next_rebalancing_index = portfolio_metrics.index.get_loc(sale.date) + 1
+                next_rebalancing_index = portfolio_metrics.index.get_loc(sale.date) + 1  # ToDo check this again
                 for i in range(10):
                     closest_expiry -= dt.timedelta(days=1)
                     if (stockprices.index == closest_expiry.date()).any():
@@ -922,16 +1036,10 @@ def evaluate_strategy(
                                                                                                             sale.strike_price -
                                                                                                             stockprices.loc[
                                                                                                                 closest_expiry.date(), sale.id])
-                        portfolio_metrics.loc[sale.date, 'earnings'] += multiplier * amount * sale.best_bid
+                            portfolio_metrics.iloc[next_rebalancing_index, earnings_column_index] += multiplier * amount * sale.best_bid
+                        df_final.loc[index, 'stockprice_at_expiry'] = stockprices.loc[closest_expiry.date(), sale.id]
                         break
 
-        # not sure which annualization method to use
-        returns = portfolio_metrics.cash.pct_change()
-        # annual_return = (1+returns.mean())**len(portfolio_metrics)
-        annual_return = returns.mean() * len(portfolio_metrics)
-        annual_vola = returns.std() * np.sqrt(len(portfolio_metrics))
-        sharperatio = annual_return / annual_vola
-        # portfolio_maxdrawdown   = portfolio['metrics'].portfolio_value.rolling(window=ddwin).apply(max_dd).min()
 
     except:
         print("Iterating through evaluation crashed on this sale:")
@@ -943,8 +1051,14 @@ def evaluate_strategy(
     annual_return = returns.mean() * len(portfolio_metrics)
     annual_vola = returns.std() * np.sqrt(len(portfolio_metrics))
     sharperatio = annual_return / annual_vola
+    maxdrawdown = portfolio_metrics.cash.rolling(window=ddwin).apply(max_dd).min()
 
-    return (sharperatio, annual_return, annual_vola, portfolio_metrics, df_final)
+    return (sharperatio, annual_return, annual_vola, maxdrawdown, portfolio_metrics, df_final)
+
+
+portfolio_metrics[:5]
+portfolio_metrics.cash.plot()
+(df.earnings - df.payments).cumsum().plot()
 
 
 # # Main: Data Loading & Approach Evaluation
