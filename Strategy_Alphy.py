@@ -5,6 +5,7 @@ import sys
 import pandas as pd
 import numpy as np
 import datetime as dt
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas_datareader.data as web
 import wrds
@@ -50,6 +51,7 @@ paths['all_options3_h5'] = rootpath + "all_options3.h5"
 paths['preprocessed_options'] = rootpath + "preprocessed_options.h5"
 paths['options_nested_df'] = rootpath + "options_nested_df.h5"
 paths['profiler'] = rootpath + "profile_data"
+paths['SPYdata'] = rootpath + "SPYData.xlsx"
 paths['results'] = rootpath + "results.pkl"
 
 paths['options_pickl_path'] = {}
@@ -522,10 +524,9 @@ def store_spydata():
                 pass
 
     prc = prc.loc['1996/01/01':'2015/12/31']
-    writer = pd.ExcelWriter('C:/AlgoTradingData/' + 'SPYData.xlsx')
+    writer = pd.ExcelWriter(paths['SPYdata'])
     prc.to_excel(writer, 'prc')
     writer.save()
-
 
 def store_data():
     # This function is called manually
@@ -538,6 +539,7 @@ def store_data():
     store_fundamentals()
     store_vix()
     store_options()
+    store_spydata()
     preprocess_options_data() # <-- this one takes a lot of RAM. You probably need at least 16 GB
 
 ## -------------------------------------------------------------------
@@ -958,19 +960,59 @@ def plot_amounts_histogram(loaded_results):
 
     sales.columns
 
+def plot_portfolio_vs_spy_vs_bonds(portfolio_cash,SPY_value=None,bond_index=None,startd=dt.date(1996,1,1),endd=dt.date(2015,12,31)):
+    portfolio_cash = pd.DataFrame(portfolio_cash.loc[startd:endd])
+    dat1 = portfolio_cash.pct_change()
+    dat1.iloc[0,0] = 1
+    for c in range(1,len(dat1)):
+        dat1.iloc[c,0] = dat1.iloc[c-1,0] * (1 + dat1.iloc[c,0])
+    #plt.style.use('bmh')
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    fig.subplots_adjust(top=0.85)
+    ax.set_title('Returns Comparison')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Value of $1 initial investment')
+    scale_y = 1
+    ticks_y = mpl.ticker.FuncFormatter(lambda x, pos: '{0:g}'.format(x / scale_y))
+    ax.yaxis.set_major_formatter(ticks_y)
+    ax.plot(dat1, label = 'Put Selling Portfolio')
+    if SPY_value is not None:
+        SPY_value = pd.DataFrame(SPY_value.loc[startd:endd])
+        dat2 = SPY_value.pct_change()
+        dat2.iloc[0, 0] = 1
+        for c in range(1, len(dat2)):
+            dat2.iloc[c, 0] = dat2.iloc[c - 1, 0] * (1 + dat2.iloc[c, 0])
+        ax.plot(dat2, label = 'SPY')
+    if bond_index is not None:
+        bond_index = pd.DataFrame(bond_index.loc[startd:endd])
+        dat3 = bond_index.pct_change()
+        dat3.iloc[0, 0] = 1
+        for c in range(1, len(dat3)):
+            dat3.iloc[c, 0] = dat3.iloc[c - 1, 0] * (1 + dat3.iloc[c, 0])
+        ax.plot(dat3, label = 'Bond Index')
+    plt.grid(axis='y', alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
 
 def investigate_results():
     with open(paths['results'], 'rb') as handle:
         loaded_results = pickle.load(handle)
 
-        preferred_delta_index = loaded_results[loaded_results.delta == 0.8].index.values[0]
+    SPYdata = pd.read_excel(paths['SPYdata'], index_col='Date')
 
-        example_sale = loaded_results.loc[preferred_delta_index, 'sales'].iloc[0]
-        print(example_sale)
+    preferred_delta_index = loaded_results[loaded_results.delta == 0.8].index.values[0]
 
-        plot_portfolio_values_for_deltas(loaded_results)
-        plot_portfolio_statistics_for_deltas(loaded_results)
-        plot_amounts_histogram(loaded_results)
+    example_sale = loaded_results.loc[preferred_delta_index, 'sales'].iloc[0]
+    example_cash = loaded_results.loc[preferred_delta_index, 'metrics'].cash
+    print(example_sale)
+
+    plot_portfolio_values_for_deltas(loaded_results)
+    plot_portfolio_statistics_for_deltas(loaded_results)
+    plot_amounts_histogram(loaded_results)
+    plot_portfolio_vs_spy_vs_bonds(cash, SPYdata)
 
         '''
 
@@ -997,50 +1039,6 @@ def investigate_results():
         stockprices.index
 '''
 
-#function call - returnsplot(cash/portfolio value 1, c/pv2, c/pv3,start date,end date)
-
-def returnsplot(ret1,ret2=None,ret3=None,startd=dt.date(1996,1,1),endd=dt.date(2015,12,31)):
-    ret1 = pd.DataFrame(ret1.loc[startd:endd])
-    dat1 = ret1.pct_change()
-    dat1.iloc[0,0] = 1
-    for c in range(1,len(dat1)):
-        dat1.iloc[c,0] = dat1.iloc[c-1,0] * (1 + dat1.iloc[c,0])
-    #plt.style.use('bmh')
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    fig.subplots_adjust(top=0.85)
-    ax.set_title('Returns Comparison')
-    ax.set_xlabel('Date')
-    ax.set_ylabel('Value of $1 initial investment')
-    scale_y = 1
-    ticks_y = mpl.ticker.FuncFormatter(lambda x, pos: '{0:g}'.format(x / scale_y))
-    ax.yaxis.set_major_formatter(ticks_y)
-    ax.plot(dat1, label = 'Put Selling Portfolio')
-    if ret2 is not None:
-        ret2 = pd.DataFrame(ret2.loc[startd:endd])
-        dat2 = ret2.pct_change()
-        dat2.iloc[0, 0] = 1
-        for c in range(1, len(dat2)):
-            dat2.iloc[c, 0] = dat2.iloc[c - 1, 0] * (1 + dat2.iloc[c, 0])
-        ax.plot(dat2, label = 'SPY')
-    if ret3 is not None:
-        ret3 = pd.DataFrame(ret3.loc[startd:endd])
-        dat3 = ret3.pct_change()
-        dat3.iloc[0, 0] = 1
-        for c in range(1, len(dat3)):
-            dat3.iloc[c, 0] = dat3.iloc[c - 1, 0] * (1 + dat3.iloc[c, 0])
-        ax.plot(dat3, label = 'Bond Index')
-    plt.grid(axis='y', alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-"""
-Performance w.r.t Strike Rate Comparison
-"""
-
-
-#individual stat comparison - SR, Mean, Vol
 
 def statsplot(d1,d2=None,d3=None,stat='SR', starty=1996, endy=2015):
     #plt.style.use('ggplot')
