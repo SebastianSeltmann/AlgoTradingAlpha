@@ -3,20 +3,15 @@
 ## -------------------------------------------------------------------
 import sys
 import pandas as pd
-from scipy.optimize import minimize
-from sklearn.model_selection import TimeSeriesSplit
 import numpy as np
 import datetime as dt
 # import matplotlib.pyplot as plt
-import time
 import pandas_datareader.data as web
-# import openpyxl
-import quandl
 import wrds
 import cProfile
 import pstats
-import gc
 import pickle
+
 ## -------------------------------------------------------------------
 #                           FILEPATHS
 ## -------------------------------------------------------------------
@@ -556,20 +551,26 @@ def max_dd(ser):
     return mdd
 
 def run_and_store_results():
-    results = pd.DataFrame(columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'MDD', 'metrics', 'sales'])
+    results = pd.DataFrame(columns=['strike_0', 'strike_1', 'delta', 'SR', 'ret', 'vol', 'MDD', 'metrics', 'sales'])
     strike_1 = 0
     method = 'delta'
     params = [
-        (0.8, .4),
+        (0.8, 0.4),
         (0.9, 0.5),
-        (1, 0.6),
+        (1.0, 0.6),
         (1.1, 0.7)]
     for strike_0, delta in params:
-        print(str(strike_0))
+        print(str(delta))
         (SR, ret, vol, MDD, metrics, sales) = evaluate_strategy(strike_0=strike_0, delta=delta, method=method)
+        if method == 'delta':
+            strike_0 = np.nan
+            strike_1 = np.nan
+        elif method == 'moneyness':
+            delta = np.nan
         row = {
             'strike_0': strike_0,
             'strike_1': strike_1,
+            'delta': delta,
             'SR': SR,
             'ret': ret,
             'MDD': MDD,
@@ -578,8 +579,6 @@ def run_and_store_results():
             'sales': sales
         }
         results = results.append(row, ignore_index=True)
-        # for year in range(1996, 2016):
-        #    # results[strike_0, year] = single_run(year= year, strike_0 = strike_0, strike_1 = strike_1)
 
     with open(paths['results'], 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
