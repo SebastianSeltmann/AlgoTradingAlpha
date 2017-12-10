@@ -50,9 +50,10 @@ paths['all_options2_h5'] = rootpath + "all_options2.h5"
 paths['all_options3_h5'] = rootpath + "all_options3.h5"
 paths['preprocessed_options'] = rootpath + "preprocessed_options.h5"
 paths['options_nested_df'] = rootpath + "options_nested_df.h5"
-paths['profiler'] = rootpath + "profile_data"
+parths['profiler'] = rootparth + "profile_data"
 paths['SPYdata'] = rootpath + "SPYData.xlsx"
 paths['AGGData'] = rootpath + "AGGProcessedData.xlsx"
+paths['profiler'] = rootpath + "profile_data"
 paths['results'] = rootpath + "results.pkl"
 
 paths['options_pickl_path'] = {}
@@ -60,6 +61,12 @@ paths['options'] = []
 for y in range(1996, 2017):
     paths['options'].append(rootpath + "OptionsData\\rawopt_" + str(y) + "AllIndices.csv")
     paths['options_pickl_path'][y] = rootpath + "OptionsData\\options_" + str(y) + ".pkl"
+
+paths['profiler_past'] = {}
+paths['profiler_past']['bad_strings'] = rootpath + "profile_data\\bad_strings"
+paths['profiler_past']['full_run'] = rootpath + "profile_data\\profile_data_full_run"
+
+
 
 ## -------------------------------------------------------------------
 #                           DATA SOURCING
@@ -637,7 +644,7 @@ def evaluate_strategy(
         delta=0.5,
         initial_cash=10 ** 6,
         multiplier=100,
-        weekly_risk_free_rate=(1.000232),
+        weekly_risk_free_rate=(1.00103),
         ddwin=252,
         inverter=1,
         method='delta',):
@@ -1045,9 +1052,14 @@ def plot_comparison_of_metric_across_time(portfolio,SPY=None,Bonds=None,stat='SR
     plt.ylabel(stat)
     plt.title(stat +' Comparison')
     plt.xticks(index + bar_width / 2, range(starty,endy+1))
+    plt.grid(axis='y', alpha=0.3)
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+def plot_cash_vs_margin(example_cash, example_margin_required):
+    example_cash.plot()
+    example_margin_required.plot()
 
 def investigate_results():
     with open(paths['results'], 'rb') as handle:
@@ -1056,16 +1068,26 @@ def investigate_results():
     SPYdata = pd.read_excel(paths['SPYdata'], index_col='Date')
     AGGData = pd.read_excel(paths['AGGData'], index_col='Date')
 
-    preferred_delta_index = loaded_results[loaded_results.delta == 0.8].index.values[0]
+    preferred_delta_index = loaded_results[loaded_results.delta == 1.0].index.values[0]
+
+    p = pstats.Stats(paths['profiler_past']['bad_strings'])
+    p.sort_stats('cumulative').print_stats(10)
+    p.sort_stats('tottime').print_stats(10)
+
+    p = pstats.Stats(paths['profiler_past']['full_run'])
+    p.sort_stats('cumulative').print_stats(10)
+    p.sort_stats('tottime').print_stats(10)
 
     example_sale = loaded_results.loc[preferred_delta_index, 'sales'].iloc[0]
     example_cash = loaded_results.loc[preferred_delta_index, 'metrics'].cash
+    example_margin_required = loaded_results.loc[preferred_delta_index, 'metrics'].margin_required
     print(example_sale)
 
     plot_portfolio_values_for_deltas(loaded_results)
     plot_portfolio_statistics_for_deltas(loaded_results)
     plot_amounts_histogram(loaded_results)
-    plot_portfolio_vs_spy_vs_bonds(cash, SPYdata,AGGData)
+    plot_portfolio_vs_spy_vs_bonds(example_cash, SPYdata,AGGData)
+    plot_cash_vs_margin(example_cash, example_margin_required)
 
     plot_comparison_of_metric_across_time(example_cash, SPYdata, AGGData, 'Mean', 2003, 2013)
     plot_comparison_of_metric_across_time(example_cash, SPYdata, AGGData, 'SR', 2003, 2013)
