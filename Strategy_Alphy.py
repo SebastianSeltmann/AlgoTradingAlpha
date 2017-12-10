@@ -915,6 +915,9 @@ def evaluate_strategy(
     return (sharperatio, annual_return, annual_vola, maxdrawdown, portfolio_metrics, df_final)
 
 
+## -------------------------------------------------------------------
+#                           Presentation
+## -------------------------------------------------------------------
 def plot_portfolio_values_for_deltas(loaded_results):
     for i in range(len(loaded_results)):
         series = loaded_results.loc[i,'metrics'].cash.rename('delta %1.1f' % loaded_results.loc[i,'delta'])
@@ -995,6 +998,56 @@ def plot_portfolio_vs_spy_vs_bonds(portfolio_cash,SPY_value=None,bond_index=None
     plt.tight_layout()
     plt.show()
 
+def plot_comparison_of_metric_across_time(portfolio,SPY=None,Bonds=None,stat='SR', starty=1996, endy=2015):
+#plots yearly value of required stat ('SR','Volatility','Mean') over desired period for upto 3 portfolios(cash,spy,bonds)
+#sample use - statsplot(portfolio_cash,SPY_value,AGG_value,'Mean',2003,2013)
+    #plt.style.use('ggplot')
+    start = dt.date(starty,1,1)
+    end = dt.date(endy,12,31)
+    statsdata = pd.DataFrame([], index=range(1996, 2016),
+                             columns=['SR1', 'M1', 'V1', 'SR2', 'M2', 'V2', 'SR3', 'M3', 'V3'])
+    dat1 = pd.DataFrame(portfolio.loc[start:end]).pct_change()
+    if SPY is not None:
+        dat2 = pd.DataFrame(SPY.loc[start:end]).pct_change()
+    if Bonds is not None:
+        dat3 = pd.DataFrame(Bonds.loc[start:end]).pct_change()
+    for y in range(starty,endy+1):
+        ds = dt.date(y, 1, 1)
+        de = dt.date(y, 12, 31)
+        statsdata.loc[y, 'M1'] = round(float(dat1.loc[ds:de].mean() * 252),2)
+        statsdata.loc[y, 'V1'] = round(float(dat1.loc[ds:de].std() * np.sqrt(252)), 2)
+        statsdata.loc[y, 'SR1'] = round(statsdata.loc[y, 'M1'] / statsdata.loc[y, 'V1'],2)
+        if SPY is not None:
+            statsdata.loc[y, 'M2'] = round(float(dat2.loc[ds:de].mean() * 252), 2)
+            statsdata.loc[y, 'V2'] = round(float(dat2.loc[ds:de].std() * np.sqrt(252)), 2)
+            statsdata.loc[y, 'SR2'] = round(statsdata.loc[y, 'M2'] / statsdata.loc[y, 'V2'], 2)
+        if Bonds is not None:
+            statsdata.loc[y, 'M3'] = round(float(dat3.loc[ds:de].mean() * 252), 2)
+            statsdata.loc[y, 'V3'] = round(float(dat3.loc[ds:de].std() * np.sqrt(252)), 2)
+            statsdata.loc[y, 'SR3'] = round(statsdata.loc[y, 'M3'] / statsdata.loc[y, 'V3'], 2)
+    n_groups = endy-starty+1
+    index = np.arange(n_groups)
+    bar_width = 0.35
+    disp = 'SR'
+    if stat=='SR' or stat==None:
+        disp = 'SR'
+        stat = 'SR'
+    if stat=='Volatility':
+        disp = 'V'
+    if stat=='Mean':
+        disp = 'M'
+    plt.bar(index, statsdata.loc[starty:endy,(disp + str(1))], bar_width, alpha=0.4, color='b', label=stat+ ' portfolio')
+    if SPY is not None:
+        plt.bar(index + bar_width, statsdata.loc[starty:endy,(disp+str(2))], bar_width, alpha=0.4, color='r', label=stat+' SPY')
+    if Bonds is not None:
+        plt.bar(index + bar_width*2, statsdata.loc[starty:endy,(disp+str(3))], bar_width, alpha=0.4, color='g', label=stat + ' Bonds')
+    plt.xlabel('Years')
+    plt.ylabel(stat)
+    plt.title(stat +' Comparison')
+    plt.xticks(index + bar_width / 2, range(starty,endy+1))
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 
 def investigate_results():
     with open(paths['results'], 'rb') as handle:
@@ -1014,79 +1067,7 @@ def investigate_results():
     plot_amounts_histogram(loaded_results)
     plot_portfolio_vs_spy_vs_bonds(cash, SPYdata,AGGData)
 
-        '''
-
-        plt.figure()
-
-        returnsplot(cash,)
-        loaded_results.loc[0, 'metrics'].columns
-        metrics = loaded_results.loc[0, 'metrics'][['cash', 'earnings', 'payments', 'fees']]
-        for i in range(len(loaded_results.index)):
-            loaded_results.loc[i, 'metrics'].cash.plot()
-        loaded_results.loc[0, 'metrics'].earnings.plot()
-        loaded_results.loc[0, 'metrics'].margin_required.plot()
-        earnings = loaded_results.loc[0, 'metrics'].earnings
-        cost = loaded_results.loc[0, 'metrics'].payments + loaded_results.loc[0, 'metrics'].fees
-        cost.plot()
-        earnings.plot()
-
-        temp = loaded_results.loc[0, 'metrics'].earnings
-        temp.plot()
-        sales = loaded_results.loc[0, 'sales']
-        sales[sales.date == dt.date(2008, 10, 24)].sort_values(by=['amount'])
-        sales.loc[1629307].id
-        stockprices[sales.loc[1629307].id].iloc[3200:3300].plot()
-        stockprices.index
-'''
-
-#plots yearly value of required stat ('SR','Volatility','Mean') over desired period for upto 3 portfolios(cash,spy,bonds)
-#sample use - statsplot(portfolio_cash,SPY_value,AGG_value,'Mean',2003,2013)
-def statsplot(d1,d2=None,d3=None,stat='SR', starty=1996, endy=2015):
-    #plt.style.use('ggplot')
-    start = dt.date(starty,1,1)
-    end = dt.date(endy,12,31)
-    statsdata = pd.DataFrame([], index=range(1996, 2016),
-                             columns=['SR1', 'M1', 'V1', 'SR2', 'M2', 'V2', 'SR3', 'M3', 'V3'])
-    dat1 = pd.DataFrame(d1.loc[start:end]).pct_change()
-    if d2 is not None:
-        dat2 = pd.DataFrame(d2.loc[start:end]).pct_change()
-    if d3 is not None:
-        dat3 = pd.DataFrame(d3.loc[start:end]).pct_change()
-    for y in range(starty,endy+1):
-        ds = dt.date(y, 1, 1)
-        de = dt.date(y, 12, 31)
-        statsdata.loc[y, 'M1'] = round(float(dat1.loc[ds:de].mean() * 252),2)
-        statsdata.loc[y, 'V1'] = round(float(dat1.loc[ds:de].std() * np.sqrt(252)), 2)
-        statsdata.loc[y, 'SR1'] = round(statsdata.loc[y, 'M1'] / statsdata.loc[y, 'V1'],2)
-        if d2 is not None:
-            statsdata.loc[y, 'M2'] = round(float(dat2.loc[ds:de].mean() * 252), 2)
-            statsdata.loc[y, 'V2'] = round(float(dat2.loc[ds:de].std() * np.sqrt(252)), 2)
-            statsdata.loc[y, 'SR2'] = round(statsdata.loc[y, 'M2'] / statsdata.loc[y, 'V2'], 2)
-        if d3 is not None:
-            statsdata.loc[y, 'M3'] = round(float(dat3.loc[ds:de].mean() * 252), 2)
-            statsdata.loc[y, 'V3'] = round(float(dat3.loc[ds:de].std() * np.sqrt(252)), 2)
-            statsdata.loc[y, 'SR3'] = round(statsdata.loc[y, 'M3'] / statsdata.loc[y, 'V3'], 2)
-    n_groups = endy-starty+1
-    index = np.arange(n_groups)
-    bar_width = 0.35
-    disp = 'SR'
-    if stat=='SR' or stat==None:
-        disp = 'SR'
-        stat = 'SR'
-    if stat=='Volatility':
-        disp = 'V'
-    if stat=='Mean':
-        disp = 'M'
-    plt.bar(index, statsdata.loc[starty:endy,(disp + str(1))], bar_width, alpha=0.4, color='b', label=stat+ ' 1')
-    if d2 is not None:
-        plt.bar(index + bar_width, statsdata.loc[starty:endy,(disp+str(2))], bar_width, alpha=0.4, color='r', label=stat+' 2')
-    if d3 is not None:
-        plt.bar(index + bar_width*2, statsdata.loc[starty:endy,(disp+str(3))], bar_width, alpha=0.4, color='r', label=stat + ' 3')
-    plt.xlabel('Years')
-    plt.ylabel(stat)
-    plt.title(stat +' Comparison')
-    plt.xticks(index + bar_width / 2, range(endy-starty+1))
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+    plot_comparison_of_metric_across_time(example_cash, SPYdata, AGGData, 'Mean', 2003, 2013)
+    plot_comparison_of_metric_across_time(example_cash, SPYdata, AGGData, 'SR', 2003, 2013)
+    plot_comparison_of_metric_across_time(example_cash, SPYdata, AGGData, 'Volatility', 2003, 2013)
 
