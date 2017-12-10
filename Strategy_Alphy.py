@@ -958,8 +958,6 @@ def plot_amounts_histogram(loaded_results):
     sales = loaded_results.loc[preferred_delta_index, 'sales']
     sales.amount.plot.hist(alpha=1.0, bins=20, title=title, xticks=sales.amount.unique())
 
-    sales.columns
-
 def plot_portfolio_vs_spy_vs_bonds(portfolio_cash,SPY_value=None,bond_index=None,startd=dt.date(1996,1,1),endd=dt.date(2015,12,31)):
     portfolio_cash = pd.DataFrame(portfolio_cash.loc[startd:endd])
     dat1 = portfolio_cash.pct_change()
