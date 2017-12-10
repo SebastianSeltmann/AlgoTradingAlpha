@@ -5,7 +5,7 @@ import sys
 import pandas as pd
 import numpy as np
 import datetime as dt
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import pandas_datareader.data as web
 import wrds
 import cProfile
@@ -870,26 +870,79 @@ def evaluate_strategy(
 
     returns = portfolio_metrics.cash.pct_change()
     # annual_return = (1+returns.mean())**len(portfolio_metrics)
-    annual_return = returns.mean() * len(portfolio_metrics)
-    annual_vola = returns.std() * np.sqrt(len(portfolio_metrics))
+    annual_return = returns.mean() * 52
+    annual_vola = returns.std() * np.sqrt(52)
     sharperatio = annual_return / annual_vola
     maxdrawdown = portfolio_metrics.cash.rolling(window=ddwin).apply(max_dd).min()
 
     return (sharperatio, annual_return, annual_vola, maxdrawdown, portfolio_metrics, df_final)
 
 
+def plot_portfolio_values_for_deltas(loaded_results):
+    for i in range(len(loaded_results)):
+        series = loaded_results.loc[i,'metrics'].cash.rename('delta %1.1f' % loaded_results.loc[i,'delta'])
+        series.plot(legend=True, title='Portfolio values over time depending on target Deltas')
+
+def plot_portfolio_statistics_for_deltas(loaded_results):
+    n_groups = len(loaded_results['delta'])
+
+    sr = loaded_results['SR']
+    ret = loaded_results['ret']
+    vola = loaded_results['vol']
+    mdd = loaded_results['MDD']
+    #mdd = random.sample(range(10, 50), 5)
+    #mdd = [x / 100 for x in mdd]
+
+    fig, ax = plt.subplots()
+    ax2 = ax.twinx()
+    index = np.arange(n_groups)
+    bar_width = 0.15
+    opacity = 0.4
+
+    plt.bar(index - bar_width, ret, bar_width, alpha=opacity, color='r', label='Return')
+    plt.bar(index, vola, bar_width, alpha=opacity, color='g', label='Volatility')
+    plt.bar(index + bar_width, mdd, bar_width, alpha=opacity, color='k', label='MDD')
+
+    plt.title('Performance at various Deltas')
+    ###needs changing
+    plt.xticks(index + bar_width / 2, (loaded_results['delta']))
+    plt.legend()
+    plt.tight_layout()
+    ax.set_ylabel('Return / Volatility / MDD')
+    ax.set_xlabel('Delta')
+    ax2.tick_params('y', colors='b')
+    ax2.scatter(index, sr, c='b', marker='D')
+    ax2.set_ylabel('SR', color='b')
+    ax2.tick_params('SR', colors='b')
+    ax2.grid(True)
+    plt.show()
+
+def plot_amounts_histogram(loaded_results):
+    title = 'Histogram of amounts of contracts sold at any week and stock'
+    sales = loaded_results.loc[preferred_delta_index, 'sales']
+    sales.amount.plot.hist(alpha=1.0, bins=20, title=title, xticks=sales.amount.unique())
+
+    sales.columns
 
 
 def investigate_results():
     with open(paths['results'], 'rb') as handle:
         loaded_results = pickle.load(handle)
-        cash = loaded_results.loc[2, 'metrics'].cash
 
+        preferred_delta_index = loaded_results[loaded_results.delta == 0.8].index.values[0]
+
+        example_sale = loaded_results.loc[preferred_delta_index, 'sales'].iloc[0]
+        print(example_sale)
+
+        plot_portfolio_values_for_deltas(loaded_results)
+        plot_portfolio_statistics_for_deltas(loaded_results)
+        plot_amounts_histogram(loaded_results)
+
+        '''
+
+        plt.figure()
 
         returnsplot(cash,)
-
-
-##
         loaded_results.loc[0, 'metrics'].columns
         metrics = loaded_results.loc[0, 'metrics'][['cash', 'earnings', 'payments', 'fees']]
         for i in range(len(loaded_results.index)):
@@ -908,8 +961,7 @@ def investigate_results():
         sales.loc[1629307].id
         stockprices[sales.loc[1629307].id].iloc[3200:3300].plot()
         stockprices.index
-
-
+'''
 
 #function call - returnsplot(cash/portfolio value 1, c/pv2, c/pv3,start date,end date)
 
@@ -952,40 +1004,6 @@ def returnsplot(ret1,ret2=None,ret3=None,startd=dt.date(1996,1,1),endd=dt.date(2
 """
 Performance w.r.t Strike Rate Comparison
 """
-
-def deltasplot(loaded_results):
-    n_groups = len(loaded_results['delta'])
-
-    sr = loaded_results['SR']
-    ret = loaded_results['ret']
-    vola = loaded_results['vol']
-    mdd = loaded_results['MDD']
-    #mdd = random.sample(range(10, 50), 5)
-    #mdd = [x / 100 for x in mdd]
-
-    fig, ax = plt.subplots()
-    ax2 = ax.twinx()
-    index = np.arange(n_groups)
-    bar_width = 0.15
-    opacity = 0.4
-
-    plt.bar(index - bar_width, ret, bar_width, alpha=opacity, color='r', label='Return')
-    plt.bar(index, vola, bar_width, alpha=opacity, color='g', label='Volatility')
-    plt.bar(index + bar_width, mdd, bar_width, alpha=opacity, color='k', label='MDD')
-
-    plt.title('Performance at various Deltas')
-    ###needs changing
-    plt.xticks(index + bar_width / 2, (loaded_results['delta']))
-    plt.legend()
-    plt.tight_layout()
-    ax.set_ylabel('Return / Volatility / MDD')
-    ax.set_xlabel('Delta')
-    ax2.tick_params('y', colors='b')
-    ax2.scatter(index, sr, c='b', marker='D')
-    ax2.set_ylabel('SR', color='b')
-    ax2.tick_params('SR', colors='b')
-    ax2.grid(True)
-    plt.show()
 
 
 #individual stat comparison - SR, Mean, Vol
@@ -1038,3 +1056,4 @@ def statsplot(d1,d2=None,d3=None,stat='SR', starty=1996, endy=2015):
     plt.legend()
     plt.tight_layout()
     plt.show()
+
