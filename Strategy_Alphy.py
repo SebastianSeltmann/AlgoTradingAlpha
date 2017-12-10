@@ -52,6 +52,7 @@ paths['preprocessed_options'] = rootpath + "preprocessed_options.h5"
 paths['options_nested_df'] = rootpath + "options_nested_df.h5"
 paths['profiler'] = rootpath + "profile_data"
 paths['SPYdata'] = rootpath + "SPYData.xlsx"
+paths['AGGData'] = rootpath + "AGGProcessedData.xlsx"
 paths['results'] = rootpath + "results.pkl"
 
 paths['options_pickl_path'] = {}
@@ -960,6 +961,7 @@ def plot_amounts_histogram(loaded_results):
 
     sales.columns
 
+#sample usage - plot_port...(portfolio_cash,SPY_value,AGG_value,dt.date(2003,1,1),dt.date(2013,12,31))
 def plot_portfolio_vs_spy_vs_bonds(portfolio_cash,SPY_value=None,bond_index=None,startd=dt.date(1996,1,1),endd=dt.date(2015,12,31)):
     portfolio_cash = pd.DataFrame(portfolio_cash.loc[startd:endd])
     dat1 = portfolio_cash.pct_change()
@@ -1002,6 +1004,7 @@ def investigate_results():
         loaded_results = pickle.load(handle)
 
     SPYdata = pd.read_excel(paths['SPYdata'], index_col='Date')
+    AGGData = pd.read_excel(paths['AGGData'], index_col='Date')
 
     preferred_delta_index = loaded_results[loaded_results.delta == 0.8].index.values[0]
 
@@ -1012,7 +1015,7 @@ def investigate_results():
     plot_portfolio_values_for_deltas(loaded_results)
     plot_portfolio_statistics_for_deltas(loaded_results)
     plot_amounts_histogram(loaded_results)
-    plot_portfolio_vs_spy_vs_bonds(cash, SPYdata)
+    plot_portfolio_vs_spy_vs_bonds(cash, SPYdata,AGGData)
 
         '''
 
@@ -1039,7 +1042,8 @@ def investigate_results():
         stockprices.index
 '''
 
-
+#plots yearly value of required stat ('SR','Volatility','Mean') over desired period for upto 3 portfolios(cash,spy,bonds)
+#sample use - statsplot(portfolio_cash,SPY_value,AGG_value,'Mean',2003,2013)
 def statsplot(d1,d2=None,d3=None,stat='SR', starty=1996, endy=2015):
     #plt.style.use('ggplot')
     start = dt.date(starty,1,1)
