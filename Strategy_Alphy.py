@@ -563,10 +563,10 @@ def run_and_store_results():
         print(str(delta))
         (SR, ret, vol, MDD, metrics, sales) = evaluate_strategy(strike_0=strike_0, delta=delta, method=method)
         if method == 'delta':
-            strike_0 = np.nan
-            strike_1 = np.nan
+            strike_0 = 0
+            strike_1 = 0
         elif method == 'moneyness':
-            delta = np.nan
+            delta = 0
         row = {
             'strike_0': strike_0,
             'strike_1': strike_1,
@@ -706,7 +706,7 @@ def evaluate_strategy(
         else:
             return 0.25
 
-    commissions = df_sorted['best_bid'].apply(lambda x: choose_commission(x)).rename('commission')
+    commissions = df_sorted['option_price'].apply(lambda x: choose_commission(x)).rename('commission')
     df_final = pd.concat([df_sorted, commissions], axis=1)
     df_final = df_final.assign(amount=np.nan)  # adding column for sale amount - they will be inserted later
     df_final = df_final.assign(stockprice_now=np.nan)
@@ -759,7 +759,7 @@ def evaluate_strategy(
     portfolio_metrics.payments.cumsum().plot()
     df2 = df[(df.strike_price > df.stockprice_at_expiry)]
     ((df2.strike_price - df2.stockprice_at_expiry)*df2.amount).sum()*multiplier
-    ((df.best_bid*df.amount)*multiplier).sum()
+    ((df.option_price*df.amount)*multiplier).sum()
 
     df.columns
     '''
@@ -802,7 +802,7 @@ def evaluate_strategy(
                     (10% * Strike Price)
                 )
             '''
-            margin_required = amount * multiplier * (sale.best_bid + max(
+            margin_required = amount * multiplier * (sale.option_price + max(
                 0.2 * stockprices.loc[sale.date.date(), sale.id] - (
                 stockprices.loc[sale.date.date(), sale.id] - sale.strike_price), 0.1 * sale.strike_price))
 
@@ -812,7 +812,7 @@ def evaluate_strategy(
                 portfolio_metrics.loc[(portfolio_metrics.index >= sale.date) & (
                 portfolio_metrics.index <= expiry), 'margin_required'] += margin_required
 
-                earnings = multiplier * amount * sale.best_bid
+                earnings = multiplier * amount * sale.option_price
                 losses = multiplier * amount * max(0, sale.strike_price - stockprices.loc[expiry.date(), sale.id])
                 df_final.loc[index, 'stockprice_now'] = stockprices.loc[sale.date.date(), sale.id]
                 if earnings < losses:
@@ -830,7 +830,7 @@ def evaluate_strategy(
                     portfolio_metrics.loc[expiry, 'payments'] += multiplier * amount * max(0, sale.strike_price -
                                                                                            stockprices.loc[
                                                                                                expiry.date(), sale.id])
-                    portfolio_metrics.loc[expiry, 'earnings'] += multiplier * amount * sale.best_bid
+                    portfolio_metrics.loc[expiry, 'earnings'] += multiplier * amount * sale.option_price
                 df_final.loc[index, 'stockprice_at_expiry'] = stockprices.loc[expiry.date(), sale.id]
             except:
                 # 1997-03-28 was was a good friday holiday:
@@ -849,7 +849,7 @@ def evaluate_strategy(
                                                                                                             sale.strike_price -
                                                                                                             stockprices.loc[
                                                                                                                 closest_expiry.date(), sale.id])
-                            portfolio_metrics.iloc[next_rebalancing_index, earnings_column_index] += multiplier * amount * sale.best_bid
+                            portfolio_metrics.iloc[next_rebalancing_index, earnings_column_index] += multiplier * amount * sale.option_price
                         df_final.loc[index, 'stockprice_at_expiry'] = stockprices.loc[closest_expiry.date(), sale.id]
                         break
 
