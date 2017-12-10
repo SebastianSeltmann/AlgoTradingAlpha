@@ -63,7 +63,7 @@ for y in range(1996, 2017):
     paths['options_pickl_path'][y] = rootpath + "OptionsData\\options_" + str(y) + ".pkl"
 
 paths['profiler_past'] = {}
-paths['profiler_past']['bad_strings'] = rootpath + "profile_data\\bad_strings"
+paths['profiler_past']['bad_strings'] = rootpath + "profile_data\\profile_slow_strptime"
 paths['profiler_past']['full_run'] = rootpath + "profile_data\\profile_data_full_run"
 
 
@@ -644,7 +644,7 @@ def evaluate_strategy(
         delta=0.5,
         initial_cash=10 ** 6,
         multiplier=100,
-        weekly_risk_free_rate=(1.00103),
+        weekly_risk_free_rate=(1.001), # corresponds to ~5.4% annually
         ddwin=252,
         inverter=1,
         method='delta',):
@@ -1070,7 +1070,7 @@ def investigate_results():
 
     preferred_delta_index = loaded_results[loaded_results.delta == 1.0].index.values[0]
 
-    p = pstats.Stats(paths['profiler_past']['bad_strings'])
+    p = pstats.Stats(paths['profiler_past']['bad_strpdate'])
     p.sort_stats('cumulative').print_stats(10)
     p.sort_stats('tottime').print_stats(10)
 
