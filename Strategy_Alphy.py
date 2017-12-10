@@ -1,4 +1,6 @@
-## ---------------------- IMPORT PACKAGES ----------------------------
+## -------------------------------------------------------------------
+#                           IMPORT PACKAGES
+## -------------------------------------------------------------------
 import sys
 import pandas as pd
 from scipy.optimize import minimize
@@ -15,10 +17,9 @@ import cProfile
 import pstats
 import gc
 import pickle
-
-## ----------------------- SETTINGS ----------------------------------
-# gc.disable()
-# gc.enable()
+## -------------------------------------------------------------------
+#                           FILEPATHS
+## -------------------------------------------------------------------
 
 # # Constants
 F = open("rootpath.txt", "r")
@@ -61,7 +62,6 @@ paths['options'] = []
 for y in range(1996, 2017):
     paths['options'].append(rootpath + "OptionsData\\rawopt_" + str(y) + "AllIndices.csv")
     paths['options_pickl_path'][y] = rootpath + "OptionsData\\options_" + str(y) + ".pkl"
-
 
 ## -------------------------------------------------------------------
 #                           DATA SOURCING
@@ -128,7 +128,6 @@ def store_sp500():
     store['Prices'] = prc_merge
     store.close()
     return prc_merge, crsp_id
-
 
 def store_fundamentals():
     print('reading accounting data excel')
@@ -379,34 +378,11 @@ def store_fundamentals():
         row = row + 1
     store.close()
 
-
-'''
-def store_cleaned_FCFF(prices, linkage):
-
-    store = pd.HDFStore(paths['FCFF'])
-    FCFF = store['FCFF']
-    store.close()
-    FCFF = FCFF.applymap(lambda x: np.nan if x == 0.0 else x)
-    FCFF.columns
-
-
-    #FCFF.loc[:,'pdDates'] = list(x.date() for x in list(pd.to_datetime(vix.index)))
-    #fitted_FCFF = prices.merge(FCFF, how='left', right_on='pdDates', left_index=True)
-    fitted_FCFF = prices.merge(FCFF, how='left', right_index=True, left_index=True)
-    #fitted_FCFF.drop('pdDates',axis=1, inplace= True)
-    fitted_FCFF.drop(prices.columns, axis=1, inplace=True)
-    fitted_FCFF.columns
-    prices.columns
-
-    store = pd.HDFStore(paths['vix'])
-    store['vix'] = fitted_vix
-    store.close()
-'''
-
-
-def store_vix(prices):
+def store_vix():
     '''
     # Earliest VIX available from quandl is 2005
+    # That is why we use yahoo instead
+
     F = open(paths['quandl_key'], "r")
     quandl_key = F.read()
     F.close()
@@ -416,6 +392,10 @@ def store_vix(prices):
     VIX = quandl.get('CHRIS/CBOE_VX1', start_date="2003-12-31", end_date="2006-12-31")
     print(VIX.index.min())
     '''
+
+    store = pd.HDFStore(paths['h5 constituents & prices'])
+    prices = store['Prices']
+    store.close()
 
     years = range(1990, 2018)
     attempts = 30
@@ -443,19 +423,15 @@ def store_vix(prices):
     store['vix'] = fitted_vix
     store.close()
 
+def store_options():
+    store = pd.HDFStore(paths['h5 constituents & prices'])
+    CRSP_const = store['CRSP_const']
+    store.close()
 
-def store_options(CRSP_const, prices):
     ## Create constituents data frame
-    open(paths['all_options_h5'], 'w').close()  # delete HDF
+    open(paths['all_options_h5'], 'w').close()  # delete previous HDF
     CRSP_const = CRSP_const[CRSP_const['ending'] > '1996-01-01']
 
-    ids = CRSP_const
-
-    ## cut the prices data to start in 1996
-    dates_p = np.asarray(prices.index)
-    prices = prices[dates_p >= pd.datetime.date(pd.datetime(1996, 1, 4))]
-
-    ##
     st_y = pd.to_datetime(CRSP_const['start'])
     en_y = pd.to_datetime(CRSP_const['ending'])
 
@@ -470,9 +446,13 @@ def store_options(CRSP_const, prices):
             idx3 = data.best_bid > 0
             idx = idx1 & idx2 & idx3
             const = CRSP_const.loc[idx, :].reset_index(drop=True)
-            listO = pd.merge(data[['id', 'date', 'days', 'best_offer', 'impl_volatility', 'delta', 'strike_price']],
+            listO = pd.merge(data[['id', 'date', 'days', 'best_bid', 'best_offer', 'impl_volatility', 'delta', 'strike_price']],
                              const[['PERMNO']], how='inner', left_on=['id'], right_on=['PERMNO'])
-            listO.rename(index=str, columns={"best_offer": "best_bid"}, inplace=True)
+
+            option_price = (listO.best_bid + listO.best_offer) / 2
+            listO = pd.concat([listO, option_price], axis=1).rename(columns={0: 'option_price'})
+            listO.drop(['best_bid', 'best_offer'], axis=1, inplace=True)
+
             listO['date'] = pd.to_datetime(listO['date'], format='%d%b%Y')
             idx3 = listO['delta'] < 0
             listO = listO.loc[idx3, :]
@@ -482,25 +462,31 @@ def store_options(CRSP_const, prices):
             store.append('options' + cur_y, listO, index=False, data_columns=True)
             store.close()
 
+def get_optionsdata_for_year(year):
+    store = pd.HDFStore(paths['all_options_h5'])
+    optionsdata_for_year = store['options' + str(year)]
+    store.close()
+    return optionsdata_for_year
 
 def preprocess_options_data():
     start_year = 1996
     end_year = 2016
+    print('Preprocessing optionsdata')
     df = pd.DataFrame()
     for year in range(start_year, end_year):  # range(1996, 2016)
         options_data_year = get_optionsdata_for_year(year)
         df = df.append(options_data_year)
 
     df_fridays = df[df.date.apply(lambda x: x.weekday()) == 4]
-    df_nice_maturities = df_fridays[df_fridays['days'].isin([29, 22, 43, 36])]
-    # if len(df_nice_maturities) == 0:
+
     print("fixing")
     '''
     on fridays the remaining days will always be one of these values: 8, 15, 22, 29, 36, 43, 50, 57
-    this was true for all 1996 and 1997, so I assume it is true for all years
+    this is true for almost all the years
     on any given friday, two of these maturities will be available for selling, and these two are 28 days apart
     that makes filtering for just the ones we want to invest in straightforward
     29,22,43,36
+    unfortunately this was not true in 2005, so we clean up
     '''
     to_be_replaced = [6, 7, 8, 13, 14, 15, 20, 21, 27, 28, 34, 35, 41, 42, 48, 49, 56]
     replacements = [8, 8, 8, 15, 15, 15, 22, 22, 29, 29, 36, 36, 43, 43, 50, 50, 57]
@@ -512,42 +498,22 @@ def preprocess_options_data():
     store['preprocessed_options'] = df_nice_maturities
     store.close()
 
-
-command = 'load_data()'
-command = 'store_options_as_nested_df(CRSP_const, prices)'
-command = 'laufen()'
-
-
-def run_profiler(command):
-    print('Profiler Running')
-    cProfile.run(command, filename=paths['profiler'])
-    p = pstats.Stats(paths['profiler'])
-    p.sort_stats('cumulative').print_stats(10)
-    p.sort_stats('tottime').print_stats(10)
-
-
 def store_data():
     # This function is called manually
     # it needs to be called only once
 
     # Retrieve Data from original sources
     # Clean them appropriately
-    # Store them in a format ready to be loaded by main process:
-    # -  stockprices,
-    # -  characteristics,
-    # -  factors,
-    # -  options,
-    '''
-    F = open(paths['quandl_key'], "r")
-    quandl_key = F.read()
-    F.close()
-    '''
-    prices, CRSP_const = store_sp500()
+    # Store them in a format ready to be loaded by main
+    store_sp500()
     store_fundamentals()
-    store_options(CRSP_const)
-    store_vix(prices)
+    store_vix()
+    store_options()
+    preprocess_options_data() # <-- this one takes a lot of RAM. You probably need at least 16 GB
 
-
+## -------------------------------------------------------------------
+#                           UTILITIES
+## -------------------------------------------------------------------
 def load_data():
     # # Data Storing and calling
     store = pd.HDFStore(paths['h5 constituents & prices'])
@@ -565,120 +531,22 @@ def load_data():
     FCFF = store['FCFF']
     store.close()
 
-    store = pd.HDFStore(paths['Linkage.h5'])
-    linkage = store['Linkage']
-    store.close()
-
     store = pd.HDFStore(paths['preprocessed_options'])
     options = store['preprocessed_options']
     store.close()
-    '''
-    # Options data sourcing (test)
-    store = pd.HDFStore(paths['all_options_h5'])
-    x = store['options1996']
-    store.close()
-
-    store = pd.HDFStore(paths['Fundamentals.h5'])
-    market_value = store['Market Value - Total']
-    debt = store['Long-Term Debt - Total']
-    store.close()
-
-    store.keys()
-
-    market_value = market_value.applymap(lambda x: np.nan if x == 0 else x)
-    market_value.dropna(how='all')
-    market_value.dropna(how='all').dropna(how='all',axis=1)
-    debt
-    debt.dropna(how='all')
-
-    FCFF.dropna(how='all')
-
-
-    '''
 
     return (prices, prices_raw, comp_const, CRSP_const, vix, FCFF, options)
 
-
-def load_chunked_data(chunksize=251):
-    reader_stockprices = pd.read_table(paths['options'][0], sep=',', chunksize=chunksize)
-    # reader_options          = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_options = pd.read_hdf(paths['all_options_h5'], 'options', chunksize=chunksize)
-    reader_FCFF = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_membership = pd.read_table(paths['options'][1], sep=',', chunksize=chunksize)
-    reader_vix = pd.read_hdf(paths['vix'], sep=',', chunksize=chunksize)
-    return zip(reader_stockprices, reader_options, reader_FCFF, reader_membership)
-
-
-def call_options_data():
-    store = pd.HDFStore(paths['all_options2_h5'])
-    x = store.select(key='options2', where='date == ["02JAN2000"]')
-
-    store.close()
-
-    store = pd.HDFStore(rootpath + "draft_options2.h5")
-    x = store.append('options2', x, data_columns=True)
-    store['options2'] = x
-    store.close()
-
-
-# # Optimization Process
-def objective(
-        params,
-        stockprices,
-        options,
-        FCFF,
-        VIX,
-        membership, ):
-    portfolio_sharperatio, portfolio_returns, portfolio_maxdrawdown = evaluate_strategy(
-        params[0],  # coverage,
-        params[1],  # quantile,
-        params[2],  # strike_0,
-        params[3],  # strike_1,
-        stockprices,
-        options,
-        FCFF,
-        VIX,
-        membership, )
-    # We are interested in maximizing the first of the evaluation metrics
-    # We achieve this by minimizing the negative of the first metric
-    return - (portfolio_sharperatio)
-
-
-def optimize(
-        stockprices,
-        options,
-        FCFF,
-        VIX,
-        membership, ):
-    # create the parameters of our strategy: coverage, quantile & strike regression
-    # call scipy library and let it optimize the values for the parameters, for certain return metrics
-    # return these optimized parameters
-
-    bounds = [
-        (0.1, 1),  # coverage
-        (0.01, 1),  # quantile
-        (None, None),  # strike_0
-        (None, None)  # strike_1
-    ]
-
-    initial_guesses = [0.9, 0.9, 1, 0]
-    minimization = minimize(
-        fun=objective,
-        x0=initial_guesses,
-        args=(stockprices, options, FCFF, VIX, membership),
-        bounds=bounds
-    )
-    print(minimization)
-    (
-        optimized_coverage,
-        optimized_quantile,
-        optimized_strike_0,
-        optimized_strike_1,
-    ) = minimization.x
-    return (optimized_coverage, optimized_quantile, optimized_strike_0, optimized_strike_1)
-
-
-# # Strategy Evaluation
+def run_profiler(command):
+    '''
+    command = 'load_data()'
+    command = 'store_options_as_nested_df(CRSP_const, prices)'
+    '''
+    print('Profiler Running')
+    cProfile.run(command, filename=paths['profiler'])
+    p = pstats.Stats(paths['profiler'])
+    p.sort_stats('cumulative').print_stats(10)
+    p.sort_stats('tottime').print_stats(10)
 
 def max_dd(ser):
     ser = pd.Series(ser)
@@ -687,29 +555,18 @@ def max_dd(ser):
     mdd = (zzmin / zzmax - 1).min()
     return mdd
 
-
-def get_optionsdata_for_year(year):
-    store = pd.HDFStore(paths['all_options_h5'])
-    optionsdata_for_year = store['options' + str(year)]
-    store.close()
-    return optionsdata_for_year
-
-
-def get_nested_optionsdata_for_year(year):
-    return pd.read_pickle(paths['options_pickl_path'][year])
-
-
 def run_and_store_results():
-    '''
-    (portfolio_sharperatio, portfolio_returns, portfolio_volatility, portfolio_metrics, sales) = single_run(year=2009)
-    portfolio_metrics.cash.plot()
-    metrics.cash.plot()
-    '''
     results = pd.DataFrame(columns=['strike_0', 'strike_1', 'SR', 'ret', 'vol', 'MDD', 'metrics', 'sales'])
     strike_1 = 0
-    for strike_0 in [0.01, 0.8, 0.9, 1, 1.1, 1.2, 9001.0]:
+    method = 'delta'
+    params = [
+        (0.8, .4),
+        (0.9, 0.5),
+        (1, 0.6),
+        (1.1, 0.7)]
+    for strike_0, delta in params:
         print(str(strike_0))
-        (SR, ret, vol, MDD, metrics, sales) = evaluate_strategy(strike_0=strike_0)
+        (SR, ret, vol, MDD, metrics, sales) = evaluate_strategy(strike_0=strike_0, delta=delta, method=method)
         row = {
             'strike_0': strike_0,
             'strike_1': strike_1,
@@ -727,60 +584,22 @@ def run_and_store_results():
     with open(paths['results'], 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    with open(paths['results'], 'rb') as handle:
-        loaded_results = pickle.load(handle)
-
-        loaded_results.loc[0, 'metrics'].columns
-        metrics = loaded_results.loc[0, 'metrics'][['cash', 'earnings', 'payments', 'fees']]
-        loaded_results.loc[0, 'metrics'].cash.plot()
-        loaded_results.loc[0, 'metrics'].earnings.plot()
-        loaded_results.loc[0, 'metrics'].margin_required.plot()
-        earnings = loaded_results.loc[0, 'metrics'].earnings
-        cost = loaded_results.loc[0, 'metrics'].payments + loaded_results.loc[0, 'metrics'].fees
-        cost.plot()
-        earnings.plot()
-
-        temp = loaded_results.loc[0, 'metrics'].earnings
-        temp.plot()
-        sales = loaded_results.loc[0, 'sales']
-        sales[sales.date == dt.date(2008, 10, 24)].sort_values(by=['amount'])
-        sales.loc[1629307].id
-        stockprices[sales.loc[1629307].id].iloc[3200:3300].plot()
-        stockprices.index
-
-
-command = "single_run()"
-command = "evaluate_strategy( stockprices = current_stockprices, FCFF = current_FCFF, VIX = current_VIX )"
-
-sales
-
-
-# run_profiler(command)
-
 def evaluate_strategy(
         coverage=0.5,
         quantile=0.1,  # lower mean we include fewer stocks
         strike_0=0.9,
         strike_1=0.0,
+        delta=0.5,
         initial_cash=10 ** 6,
         multiplier=100,
         weekly_risk_free_rate=1.0,
         ddwin=252,
-        inverter=1, ):
-    # define initial portfolio with cash only
-    # loop through all assigned dates
-    # determine overall success after all time
-    # return report of success
-
+        inverter=1,
+        method='delta',):
     '''
     # Run these statements to prepare everything needed from outside this function
-    print("loading general data")
-    stockprices, prices_raw, comp_const, CRSP_const, VIX, FCFF = load_data()
+
     year = 2014
-    relevant_days_index = stockprices[dt.date(year, 1, 1):dt.date(year + 1, 1, 1)].index
-    current_stockprices = stockprices.loc[relevant_days_index]
-    current_FCFF        = FCFF.loc[relevant_days_index]
-    current_VIX         = VIX.loc[relevant_days_index]
     coverage=1
     initial_cash = 10**6
     quantile=0.1
@@ -790,11 +609,10 @@ def evaluate_strategy(
     ddwin=252
     inverter=1
     weekly_risk_free_rate=1.0
+
+
     day = dt.date(2005, 2, 4)
     stock = 11850.0
-    stockprices = current_stockprices
-    FCFF = current_FCFF
-    VIX = current_VIX
     '''
 
     print('Loading data')
@@ -808,28 +626,21 @@ def evaluate_strategy(
     FCFF = all_FCFF.loc[relevant_days_index]
     VIX = all_VIX.loc[relevant_days_index]
     df_options = all_options.loc[(all_options.date.dt.year >= start_year) & (all_options.date.dt.year < end_year)]
-    # df = optionsdata_for_year
-    # len(df) == 622719
-
 
     # keeping only the top q quantile
     FCFF_filtered = FCFF[FCFF > list(FCFF.quantile(1 - quantile, axis=1))]
     stockprices_filtered = stockprices + FCFF_filtered * 0
-    # stockprices_filtered = stockprices
     target_strike = stockprices_filtered.multiply((strike_0 + strike_1 * VIX)["Adj Close"], axis="index")
 
-    # len(df_nice_maturities) == 65736
 
     selected_target_strikes = df_options[['date', 'id']].apply(lambda x: target_strike.loc[x[0].date(), x[1]], axis=1)
     df_selected = pd.concat([df_options, selected_target_strikes], axis=1).dropna(axis=0).rename(
         columns={0: 'target_strike'})
-    # len(df_selected) == 31461
 
     diffs = np.abs(df_selected.strike_price - df_selected.target_strike)
     df_with_diff = pd.concat([df_selected, diffs], axis=1).rename(columns={0: 'abs_difference'})
 
     min_dict = {}
-
     def get_min_diff(date, id):
         # optimized this by running it only once for each date+id combination
         if not (date, id) in min_dict:
@@ -841,16 +652,19 @@ def evaluate_strategy(
 
     def get_min_delta_diff(date,id):
         if not (date, id) in min_dict:
-            min_diff = abs(df_with_diff[(df_with_diff.date == date) & (df_with_diff.id == id)].delta+0.5).min()
+            min_diff = abs(df_with_diff[(df_with_diff.date == date) & (df_with_diff.id == id)].delta+delta).min()
             min_dict[(date, id)] = min_diff
         else:
             min_diff = min_dict[(date, id)]
         return min_diff
-    #is_best_fit = df_with_diff[['date', 'id', 'abs_difference']].apply(lambda x: get_min_diff(x[0], x[1]) == x[2], axis=1)
-    is_best_fit = df_with_diff[['date', 'id', 'delta']].apply(lambda x: get_min_delta_diff(x[0], x[1]) == abs(x[2]+0.5),axis=1)
+    if method == 'moneyness':
+        is_best_fit = df_with_diff[['date', 'id', 'abs_difference']].apply(lambda x: get_min_diff(x[0], x[1]) == x[2], axis=1)
+    elif method == 'delta':
+        is_best_fit = df_with_diff[['date', 'id', 'delta']].apply(lambda x: get_min_delta_diff(x[0], x[1]) == abs(x[2]+delta),axis=1)
+    else:
+        raise Exception('Invalid Method selected')
 
     df_best = df_with_diff[is_best_fit]
-    # len(df_best) == 9907
 
     df_risky = pd.concat([df_best, df_best.delta * df_best.impl_volatility], axis=1).rename(columns={0: 'risk'})
 
@@ -1056,57 +870,24 @@ def evaluate_strategy(
     return (sharperatio, annual_return, annual_vola, maxdrawdown, portfolio_metrics, df_final)
 
 
-portfolio_metrics[:5]
-portfolio_metrics.cash.plot()
-(df.earnings - df.payments).cumsum().plot()
+def investigate_results():
+    with open(paths['results'], 'rb') as handle:
+        loaded_results = pickle.load(handle)
 
+        loaded_results.loc[0, 'metrics'].columns
+        metrics = loaded_results.loc[0, 'metrics'][['cash', 'earnings', 'payments', 'fees']]
+        loaded_results.loc[0, 'metrics'].cash.plot()
+        loaded_results.loc[0, 'metrics'].earnings.plot()
+        loaded_results.loc[0, 'metrics'].margin_required.plot()
+        earnings = loaded_results.loc[0, 'metrics'].earnings
+        cost = loaded_results.loc[0, 'metrics'].payments + loaded_results.loc[0, 'metrics'].fees
+        cost.plot()
+        earnings.plot()
 
-# # Main: Data Loading & Approach Evaluation
-
-# load the datasets:
-# -  stockprices,
-# -  characteristics,
-# -  factors,
-# -  options,
-
-# Rolling window backtest approach
-# split the timerange into chunks
-# call optimize for each training-range
-# call evaluate_strategy for each testing range with optimized params
-# collect metrics of success
-# report overall success of the strategy
-
-
-def main():
-    metrics = []
-    counter = 0
-    for stockprices, options, FCFF, membership in load_chunked_data():
-        print(stockprices.shape)
-
-        if counter >= 0:
-            (metric_of_success1, metric_of_success2) = evaluate_strategy(
-                optimized_coverage,
-                optimized_quantile,
-                optimized_strike_0,
-                optimized_strike_1,
-                stockprices,
-                options,
-                FCFF,
-                membership,
-            )
-
-            metrics.append((metric_of_success1, metric_of_success2))
-
-        (
-            optimized_coverage,
-            optimized_quantile,
-            optimized_strike_0,
-            optimized_strike_1,
-        ) = optimize(
-            stockprices,
-            options,
-            FCFF,
-            membership, )
-        counter = counter + 1
-
-    print(metrics)
+        temp = loaded_results.loc[0, 'metrics'].earnings
+        temp.plot()
+        sales = loaded_results.loc[0, 'sales']
+        sales[sales.date == dt.date(2008, 10, 24)].sort_values(by=['amount'])
+        sales.loc[1629307].id
+        stockprices[sales.loc[1629307].id].iloc[3200:3300].plot()
+        stockprices.index
