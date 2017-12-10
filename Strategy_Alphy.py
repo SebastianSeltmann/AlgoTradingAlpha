@@ -493,6 +493,40 @@ def preprocess_options_data():
     store['preprocessed_options'] = df_nice_maturities
     store.close()
 
+def store_spydata():
+    tickers_collection = {
+        'index': ['SPY']
+        }
+
+    dt_start = dt.datetime(1996, 1, 1)
+    dt_end = dt.datetime(2015,12,31)
+    f = web.DataReader('SPY', 'yahoo', dt_start, dt_end)
+
+    tickers = []
+    for z in tickers_collection.keys():
+        print(z)
+        tickers = tickers + tickers_collection[z]
+
+    prc = pd.DataFrame([], index=f.index, columns=tickers)
+
+    NUMTRIES = 0
+    while (len(tickers) > 0) & (NUMTRIES < 10):
+        NUMTRIES = 1 + NUMTRIES
+        for z in tickers:
+            print(z, NUMTRIES, len(tickers))
+            try:
+                f = web.DataReader(z, 'yahoo', dt_start, dt_end)
+                prc.loc[:, z] = f.loc[:, 'Adj Close']
+                tickers.remove(z)
+            except:
+                pass
+
+    prc = prc.loc['1996/01/01':'2015/12/31']
+    writer = pd.ExcelWriter('C:/AlgoTradingData/' + 'SPYData.xlsx')
+    prc.to_excel(writer, 'prc')
+    writer.save()
+
+
 def store_data():
     # This function is called manually
     # it needs to be called only once
