@@ -61,7 +61,7 @@ for y in range(1996, 2017):
 ## -------------------------------------------------------------------
 #                           DATA SOURCING
 ## -------------------------------------------------------------------
-def store_sp500():
+def fetch_and_store_sp500():
     ## ---------------------- WRDS CONNECTION  ------------------------
 
     db = wrds.Connection()
@@ -500,7 +500,7 @@ def store_data():
     # Retrieve Data from original sources
     # Clean them appropriately
     # Store them in a format ready to be loaded by main
-    store_sp500()
+    fetch_and_store_sp500()
     store_fundamentals()
     store_vix()
     store_options()
@@ -532,11 +532,13 @@ def load_data():
 
     return (prices, prices_raw, comp_const, CRSP_const, vix, FCFF, options)
 
-def run_profiler(command):
-    '''
-    command = 'load_data()'
-    command = 'store_options_as_nested_df(CRSP_const, prices)'
-    '''
+def run_profiler(c_num=2):
+    commands = [
+        'load_data()',
+        'store_options_as_nested_df(CRSP_const, prices)',
+        'run_and_store_results()'
+    ]
+    command = commands[c_num]
     print('Profiler Running')
     cProfile.run(command, filename=paths['profiler'])
     p = pstats.Stats(paths['profiler'])
@@ -550,6 +552,9 @@ def max_dd(ser):
     mdd = (zzmin / zzmax - 1).min()
     return mdd
 
+## -------------------------------------------------------------------
+#                           Evaluation
+## -------------------------------------------------------------------
 def run_and_store_results():
     results = pd.DataFrame(columns=['strike_0', 'strike_1', 'delta', 'SR', 'ret', 'vol', 'MDD', 'metrics', 'sales'])
     strike_1 = 0
@@ -558,19 +563,22 @@ def run_and_store_results():
         (0.8, 0.4),
         (0.9, 0.5),
         (1.0, 0.6),
-        (1.1, 0.7)]
+        (1.1, 0.7),
+        (1.1, 0.8),
+        (1.1, 0.9),
+        (1.1, 1.0)]
     for strike_0, delta in params:
         print(str(delta))
         (SR, ret, vol, MDD, metrics, sales) = evaluate_strategy(strike_0=strike_0, delta=delta, method=method)
         if method == 'delta':
-            strike_0 = 0
-            strike_1 = 0
+            strike_0 = np.nan
+            strike_1 = np.nan
         elif method == 'moneyness':
-            delta = 0
+            delta = np.nan
         row = {
             'strike_0': strike_0,
             'strike_1': strike_1,
-            'delta': delta,
+            'delta':delta,
             'SR': SR,
             'ret': ret,
             'MDD': MDD,
@@ -579,6 +587,7 @@ def run_and_store_results():
             'sales': sales
         }
         results = results.append(row, ignore_index=True)
+
 
     with open(paths['results'], 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -591,7 +600,7 @@ def evaluate_strategy(
         delta=0.5,
         initial_cash=10 ** 6,
         multiplier=100,
-        weekly_risk_free_rate=1.0,
+        weekly_risk_free_rate=(1.000232),
         ddwin=252,
         inverter=1,
         method='delta',):
@@ -875,7 +884,8 @@ def investigate_results():
 
         loaded_results.loc[0, 'metrics'].columns
         metrics = loaded_results.loc[0, 'metrics'][['cash', 'earnings', 'payments', 'fees']]
-        loaded_results.loc[0, 'metrics'].cash.plot()
+        for i in range(len(loaded_results.index)):
+            loaded_results.loc[i, 'metrics'].cash.plot()
         loaded_results.loc[0, 'metrics'].earnings.plot()
         loaded_results.loc[0, 'metrics'].margin_required.plot()
         earnings = loaded_results.loc[0, 'metrics'].earnings
