@@ -869,10 +869,18 @@ def evaluate_strategy(
     return (sharperatio, annual_return, annual_vola, maxdrawdown, portfolio_metrics, df_final)
 
 
+
+
 def investigate_results():
     with open(paths['results'], 'rb') as handle:
         loaded_results = pickle.load(handle)
+        cash = loaded_results.loc[2, 'metrics'].cash
 
+
+        returnsplot(cash,)
+
+
+##
         loaded_results.loc[0, 'metrics'].columns
         metrics = loaded_results.loc[0, 'metrics'][['cash', 'earnings', 'payments', 'fees']]
         loaded_results.loc[0, 'metrics'].cash.plot()
@@ -890,3 +898,133 @@ def investigate_results():
         sales.loc[1629307].id
         stockprices[sales.loc[1629307].id].iloc[3200:3300].plot()
         stockprices.index
+
+
+
+#function call - returnsplot(cash/portfolio value 1, c/pv2, c/pv3,start date,end date)
+
+def returnsplot(ret1,ret2=None,ret3=None,startd=dt.date(1996,1,1),endd=dt.date(2015,12,31)):
+    ret1 = pd.DataFrame(ret1.loc[startd:endd])
+    dat1 = ret1.pct_change()
+    dat1.iloc[0,0] = 1
+    for c in range(1,len(dat1)):
+        dat1.iloc[c,0] = dat1.iloc[c-1,0] * (1 + dat1.iloc[c,0])
+    #plt.style.use('bmh')
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    fig.subplots_adjust(top=0.85)
+    ax.set_title('Returns Comparison')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Value of $1 initial investment')
+    scale_y = 1
+    ticks_y = mpl.ticker.FuncFormatter(lambda x, pos: '{0:g}'.format(x / scale_y))
+    ax.yaxis.set_major_formatter(ticks_y)
+    ax.plot(dat1, label = 'Put Selling Portfolio')
+    if ret2 is not None:
+        ret2 = pd.DataFrame(ret2.loc[startd:endd])
+        dat2 = ret2.pct_change()
+        dat2.iloc[0, 0] = 1
+        for c in range(1, len(dat2)):
+            dat2.iloc[c, 0] = dat2.iloc[c - 1, 0] * (1 + dat2.iloc[c, 0])
+        ax.plot(dat2, label = 'SPY')
+    if ret3 is not None:
+        ret3 = pd.DataFrame(ret3.loc[startd:endd])
+        dat3 = ret3.pct_change()
+        dat3.iloc[0, 0] = 1
+        for c in range(1, len(dat3)):
+            dat3.iloc[c, 0] = dat3.iloc[c - 1, 0] * (1 + dat3.iloc[c, 0])
+        ax.plot(dat3, label = 'Bond Index')
+    plt.grid(axis='y', alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+"""
+Performance w.r.t Strike Rate Comparison
+"""
+
+def deltasplot(loaded_results):
+    n_groups = len(loaded_results['delta'])
+
+    sr = loaded_results['SR']
+    ret = loaded_results['ret']
+    vola = loaded_results['vol']
+    mdd = loaded_results['MDD']
+    #mdd = random.sample(range(10, 50), 5)
+    #mdd = [x / 100 for x in mdd]
+
+    fig, ax = plt.subplots()
+    ax2 = ax.twinx()
+    index = np.arange(n_groups)
+    bar_width = 0.15
+    opacity = 0.4
+
+    plt.bar(index - bar_width, ret, bar_width, alpha=opacity, color='r', label='Return')
+    plt.bar(index, vola, bar_width, alpha=opacity, color='g', label='Volatility')
+    plt.bar(index + bar_width, mdd, bar_width, alpha=opacity, color='k', label='MDD')
+
+    plt.title('Performance at various Deltas')
+    ###needs changing
+    plt.xticks(index + bar_width / 2, (loaded_results['delta']))
+    plt.legend()
+    plt.tight_layout()
+    ax.set_ylabel('Return / Volatility / MDD')
+    ax.set_xlabel('Delta')
+    ax2.tick_params('y', colors='b')
+    ax2.scatter(index, sr, c='b', marker='D')
+    ax2.set_ylabel('SR', color='b')
+    ax2.tick_params('SR', colors='b')
+    ax2.grid(True)
+    plt.show()
+
+
+#individual stat comparison - SR, Mean, Vol
+
+def statsplot(d1,d2=None,d3=None,stat='SR', starty=1996, endy=2015):
+    #plt.style.use('ggplot')
+    start = dt.date(starty,1,1)
+    end = dt.date(endy,12,31)
+    statsdata = pd.DataFrame([], index=range(1996, 2016),
+                             columns=['SR1', 'M1', 'V1', 'SR2', 'M2', 'V2', 'SR3', 'M3', 'V3'])
+    dat1 = pd.DataFrame(d1.loc[start:end]).pct_change()
+    if d2 is not None:
+        dat2 = pd.DataFrame(d2.loc[start:end]).pct_change()
+    if d3 is not None:
+        dat3 = pd.DataFrame(d3.loc[start:end]).pct_change()
+    for y in range(starty,endy+1):
+        ds = dt.date(y, 1, 1)
+        de = dt.date(y, 12, 31)
+        statsdata.loc[y, 'M1'] = round(float(dat1.loc[ds:de].mean() * 252),2)
+        statsdata.loc[y, 'V1'] = round(float(dat1.loc[ds:de].std() * np.sqrt(252)), 2)
+        statsdata.loc[y, 'SR1'] = round(statsdata.loc[y, 'M1'] / statsdata.loc[y, 'V1'],2)
+        if d2 is not None:
+            statsdata.loc[y, 'M2'] = round(float(dat2.loc[ds:de].mean() * 252), 2)
+            statsdata.loc[y, 'V2'] = round(float(dat2.loc[ds:de].std() * np.sqrt(252)), 2)
+            statsdata.loc[y, 'SR2'] = round(statsdata.loc[y, 'M2'] / statsdata.loc[y, 'V2'], 2)
+        if d3 is not None:
+            statsdata.loc[y, 'M3'] = round(float(dat3.loc[ds:de].mean() * 252), 2)
+            statsdata.loc[y, 'V3'] = round(float(dat3.loc[ds:de].std() * np.sqrt(252)), 2)
+            statsdata.loc[y, 'SR3'] = round(statsdata.loc[y, 'M3'] / statsdata.loc[y, 'V3'], 2)
+    n_groups = endy-starty+1
+    index = np.arange(n_groups)
+    bar_width = 0.35
+    disp = 'SR'
+    if stat=='SR' or stat==None:
+        disp = 'SR'
+        stat = 'SR'
+    if stat=='Volatility':
+        disp = 'V'
+    if stat=='Mean':
+        disp = 'M'
+    plt.bar(index, statsdata.loc[starty:endy,(disp + str(1))], bar_width, alpha=0.4, color='b', label=stat+ ' 1')
+    if d2 is not None:
+        plt.bar(index + bar_width, statsdata.loc[starty:endy,(disp+str(2))], bar_width, alpha=0.4, color='r', label=stat+' 2')
+    if d3 is not None:
+        plt.bar(index + bar_width*2, statsdata.loc[starty:endy,(disp+str(3))], bar_width, alpha=0.4, color='r', label=stat + ' 3')
+    plt.xlabel('Years')
+    plt.ylabel(stat)
+    plt.title(stat +' Comparison')
+    plt.xticks(index + bar_width / 2, range(endy-starty+1))
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
