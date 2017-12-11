@@ -63,8 +63,8 @@ for y in range(1996, 2017):
     paths['options_pickl_path'][y] = rootpath + "OptionsData\\options_" + str(y) + ".pkl"
 
 paths['profiler_past'] = {}
-paths['profiler_past']['bad_strings'] = rootpath + "profile_data\\profile_slow_strptime"
-paths['profiler_past']['full_run'] = rootpath + "profile_data\\profile_data_full_run"
+paths['profiler_past']['bad_strpdate'] = rootpath + "profiler\\profile_slow_strptime"
+paths['profiler_past']['full_run'] = rootpath + "profiler\\profile_data_full_run"
 
 
 
