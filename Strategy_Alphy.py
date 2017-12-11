@@ -1068,7 +1068,7 @@ def investigate_results():
     SPYdata = pd.read_excel(paths['SPYdata'], index_col='Date')
     AGGData = pd.read_excel(paths['AGGData'], index_col='Date')
 
-    preferred_delta_index = loaded_results[loaded_results.delta == 1.0].index.values[0]
+    preferred_delta_index = loaded_results[loaded_results.delta == 0.6].index.values[0]
 
     p = pstats.Stats(paths['profiler_past']['bad_strpdate'])
     p.sort_stats('cumulative').print_stats(10)
